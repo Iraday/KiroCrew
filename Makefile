@@ -6,11 +6,14 @@
 #   make backend-bin — standalone backend tree (bundled interpreter, no system Python)
 #   make desktop   — double-clickable desktop app (universal DMG on macOS / AppImage on Linux)
 #
+# Getting a working checkout:
+#   make setup     — node + ACP adapters + venv + dashboard, then a readiness report
+#
 # Running it locally:
 #   make start     — stop any running gateway, then run one in this terminal
 #   make stop      — stop a running gateway
 #   make restart   — same as start (stop is already unconditional)
-.PHONY: all build frontend backend test clean wheel backend-bin desktop \n        start stop restart status token logs
+.PHONY: all build frontend backend test clean wheel backend-bin desktop \n        start stop restart status token logs setup adapters doctor-harness
 
 PY ?= python3
 VENV := .venv
@@ -120,6 +123,39 @@ desktop:
 	NBD="$$(cat "$${KIROCREW_HOME:-$$HOME/.kiro/crew}/node-bin-dir" 2>/dev/null || true)"; \
 	  { [ -z "$$NBD" ] || export PATH="$$NBD:$$PATH"; }; \
 	  bash packaging/build-desktop.sh
+
+# ── One-shot local setup ──
+#
+# Gets this checkout to the point where a session can actually RUN, which is a
+# larger claim than "it builds": a non-kiro harness is driven through an ACP
+# adapter that Crew SPAWNS, so an install with a built dashboard and no adapter
+# serves the UI and then fails every turn at spawn. `build` covers the first
+# half, `adapters` the second, and the report at the end names whatever is still
+# missing rather than leaving it to the first failed turn.
+#
+# It deliberately does NOT write agent.acp_backend. Which harness you drive is a
+# choice, and a setup target that quietly rewrote it would surprise anyone
+# re-running this on a configured install; the report prints the command instead.
+
+# Binary → npm package. The binary is what the resolution ladder looks for, and
+# a global install of the scoped package is what puts the unscoped binary on
+# PATH, so these agree by construction rather than by coincidence.
+ADAPTER_SPECS := claude-agent-acp=@agentclientprotocol/claude-agent-acp                  codex-acp=@agentclientprotocol/codex-acp                  claude=@anthropic-ai/claude-code
+
+setup: build adapters doctor-harness
+
+# Install only what is absent. `npm i -g` on an already-installed package is a
+# network round trip and a rebuild, and this target is meant to be re-runnable
+# on an established checkout without paying for three of them.
+adapters:
+	@$(NODE_ON_PATH); 	  if ! command -v npm >/dev/null 2>&1; then 	    echo "ERROR: npm not found. Run 'bash ensure-node.sh' first." >&2; exit 1; 	  fi; 	  for spec in $(ADAPTER_SPECS); do 	    bin="$${spec%%=*}"; pkg="$${spec#*=}"; 	    if command -v "$$bin" >/dev/null 2>&1; then 	      echo "  ✓ $$bin already installed"; 	    else 	      echo "  → installing $$pkg (provides $$bin)"; 	      npm i -g "$$pkg" --no-audit --no-fund >/dev/null || 	        echo "  ! could not install $$pkg — $$bin stays unavailable" >&2; 	    fi; 	  done
+
+# What this host can actually serve, and the two things that are not a binary.
+doctor-harness:
+	@$(NODE_ON_PATH); echo ""; echo "── harness readiness ──"; 	  $(VENV)/bin/python -c "from kiro_crew.agent_sdk import probe_backends; [print(f'  {s.policy_id:8} {s.installed:10}' + (f'  missing: {\", \".join(s.missing_components)}  →  {s.install_command}' if s.missing_components else '')) for s in probe_backends()]"
+	@echo ""; echo "── this checkout's Claude permission surface ──"; 	  if [ -f .claude/settings.local.json ]; then 	    echo "  ! .claude/settings.local.json exists and Crew did not author it."; 	    echo "    Crew's seed is create-or-decline, so it governs nothing here and"; 	    echo "    WITHHOLDS its whole MCP array — sessions in this directory get no"; 	    echo "    Crew tools. Rename that file to restore them."; 	  else 	    echo "  ✓ no foreign settings.local.json — Crew seeds it and mounts its MCP tools"; 	  fi
+	@echo ""; echo "── sign-in ──"; 	  echo "  Installed is NOT signed in, and the two fail at different times: a missing"; 	  echo "  binary is caught here, a missing credential only at the first turn. These"; 	  echo "  are the commands, not a measurement — Crew deliberately does not read a"; 	  echo "  harness's credential store, because a wrong negative would gate a user who"; 	  echo "  is already signed in through an ambient key or a relocated home."; 	  $(VENV)/bin/python -c "from kiro_crew.acp_backends import login_command_for, ACP_BACKENDS_KNOWN, POLICY_ID_BY_BACKEND; [print(f'    {POLICY_ID_BY_BACKEND.get(b, b):8} {login_command_for(b) or \"(no known command)\"}') for b in sorted(ACP_BACKENDS_KNOWN, key=lambda x: POLICY_ID_BY_BACKEND.get(x, x))]"
+	@echo ""; echo "── select a harness ──"; 	  echo "  $(KIROCREW) config set agent.acp_backend claude   # or: codex, kas, '' (kiro-cli)"; 	  echo "  current: $$($(KIROCREW) config get agent.acp_backend 2>/dev/null || echo '(unreadable)')"; 	  echo ""
 
 # ── Gateway lifetime ──
 #
