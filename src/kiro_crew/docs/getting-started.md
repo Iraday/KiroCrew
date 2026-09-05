@@ -64,10 +64,15 @@ The dashboard has to be built before the backend install, because the built
 `website/dist` is staged into the package and served by the gateway. `make
 build` does both steps plus a `.venv`.
 
-### Agent backend: `kiro-cli` (required)
+### Agent backend
 
-`kiro-cli` is the only provider (`agent.provider` is fixed to `acp`). Install it
-per its own docs, make sure the binary resolves on your `PATH`, and log in:
+`agent.provider` is fixed to `acp`, and `agent.acp_backend` chooses which agent
+Kiro Crew drives underneath it. `kiro-cli` is the default and the one the rest of
+this guide assumes; Claude Code, Codex and KAS are also selectable. Full
+comparison: [Configuration → ACP Backend](configuration.md).
+
+`kiro-cli` is installed per its own docs. Make sure the binary resolves on your
+`PATH`, then sign in:
 
 ```bash
 kiro-cli login
@@ -75,6 +80,18 @@ kiro-cli login
 
 On the first dashboard launch, the Set up Kiro page walks through installing the
 CLI and completing sign-in.
+
+To use a different backend instead, install its adapter and switch under
+**Developer → Agent Backend** (or set `agent.acp_backend`). Each has its own
+sign-in, which Kiro Crew never performs for you:
+
+| Backend | Install | Sign in |
+|---------|---------|---------|
+| Claude Code | `npm i -g @agentclientprotocol/claude-agent-acp` plus the `claude` CLI | `claude /login` |
+| Codex | `npm i -g @agentclientprotocol/codex-acp` (ships its own Codex) | `codex login`, then `codex login status` to verify |
+
+`kirocrew doctor` reports which adapters are installed. Installed is not the same
+as signed in: the check above is how you confirm the second half.
 
 ## First-Time Setup
 

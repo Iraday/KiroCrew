@@ -19,8 +19,10 @@ check fails it prints a specific fix command.
 
 ### kiro-cli is not on PATH
 
-`kiro-cli` is the agent backend and is required: `agent.provider` is fixed to
-`acp`, and the gateway spawns `kiro-cli acp --agent <name>` for every session.
+`kiro-cli` is the default agent backend, and the gateway spawns `kiro-cli acp
+--agent <name>` for every session that runs on it. It is required unless you have
+selected a different `agent.acp_backend` — see [the backend is signed
+out](#the-backend-is-signed-out) below for the others.
 
 ```bash
 which kiro-cli   # should print a path; empty means it is not on PATH
@@ -42,6 +44,45 @@ never changes. The fix is `launchctl setenv PATH "$PATH"` plus a full quit and
 relaunch — see the
 [macOS troubleshooting guide](https://github.com/kirodotdev/KiroCrew/blob/main/docs/guides/macos-troubleshooting.md)
 for the recipe and how to persist it across reboots.
+
+### The backend is signed out
+
+A session that dies on its first turn with a sign-in message is reporting the
+backend it actually ran on, which is not always `kiro-cli`. Check which one you
+are on under **Developer → Agent Backend**, or with `kirocrew config get
+agent.acp_backend`, then run that backend's own command. Kiro Crew never signs a
+backend in for you, and never asks you to paste a credential into chat.
+
+| Backend | Sign in | Verify |
+|---------|---------|--------|
+| kiro-cli, KAS | `kiro-cli login` | `kiro-cli whoami` |
+| Claude Code | `claude /login` | — |
+| Codex | `codex login` | `codex login status` |
+
+On a host with no browser, Codex also accepts `codex login --device-auth`, and
+takes an API key on stdin via `codex login --with-api-key`. If your credentials
+come from somewhere else entirely, name a `model_provider` in
+`~/.codex/config.toml` instead.
+
+Installed is not signed in. `kirocrew doctor` reports the adapter binaries and
+prints the sign-in check for the backends that have one; it deliberately does not
+run those checks for you, because a wrong negative would disable a control for
+someone who is already authenticated.
+
+Sign-in state is read at the start of a session, so finish the sign-in and then
+start a **new** chat. Retrying the failed turn or switching models cannot help.
+
+### Codex reads are not visible to the tool gate
+
+ACP v1 gives an adapter no way to ask for a passive **read**, so on the `codex`
+backend Kiro Crew's sensitive-path block cannot see reads the harness performs.
+Configured credential directories are hidden from its child process at the OS
+boundary, which contains the exposure, but that is containment rather than
+observation: those reads are not gated or recorded the way a tool call is.
+
+This is a property of the protocol version, not a misconfiguration, and there is
+nothing to fix locally. Choose `kiro-cli` or `kas` for a workload where every
+read must reach the audit log.
 
 ### Dashboard asks for sign-in but `kiro-cli` is already authenticated
 
