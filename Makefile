@@ -7,13 +7,14 @@
 #   make desktop   — double-clickable desktop app (universal DMG on macOS / AppImage on Linux)
 #
 # Getting a working checkout:
-#   make setup     — node + ACP adapters + venv + dashboard, then a readiness report
+#   make setup     — node + adapters + venv + dashboard + sign-in, then a report
+#   make signin    — sign the configured harness in, if it is not already
 #
 # Running it locally:
 #   make start     — stop any running gateway, then run one in this terminal
 #   make stop      — stop a running gateway
 #   make restart   — same as start (stop is already unconditional)
-.PHONY: all build frontend backend test clean wheel backend-bin desktop \n        start stop restart status token logs setup adapters doctor-harness
+.PHONY: all build frontend backend test clean wheel backend-bin desktop \n        start stop restart status token logs setup adapters signin doctor-harness
 
 PY ?= python3
 VENV := .venv
@@ -140,15 +141,21 @@ desktop:
 # Binary → npm package. The binary is what the resolution ladder looks for, and
 # a global install of the scoped package is what puts the unscoped binary on
 # PATH, so these agree by construction rather than by coincidence.
-ADAPTER_SPECS := claude-agent-acp=@agentclientprotocol/claude-agent-acp                  codex-acp=@agentclientprotocol/codex-acp                  claude=@anthropic-ai/claude-code
+ADAPTER_SPECS := claude-agent-acp=@agentclientprotocol/claude-agent-acp                  codex-acp=@agentclientprotocol/codex-acp                  claude=@anthropic-ai/claude-code codex=@openai/codex
 
-setup: build adapters doctor-harness
+setup: build adapters signin doctor-harness
 
 # Install only what is absent. `npm i -g` on an already-installed package is a
 # network round trip and a rebuild, and this target is meant to be re-runnable
 # on an established checkout without paying for three of them.
 adapters:
 	@$(NODE_ON_PATH); 	  if ! command -v npm >/dev/null 2>&1; then 	    echo "ERROR: npm not found. Run 'bash ensure-node.sh' first." >&2; exit 1; 	  fi; 	  for spec in $(ADAPTER_SPECS); do 	    bin="$${spec%%=*}"; pkg="$${spec#*=}"; 	    if command -v "$$bin" >/dev/null 2>&1; then 	      echo "  ✓ $$bin already installed"; 	    else 	      echo "  → installing $$pkg (provides $$bin)"; 	      npm i -g "$$pkg" --no-audit --no-fund >/dev/null || 	        echo "  ! could not install $$pkg — $$bin stays unavailable" >&2; 	    fi; 	  done
+
+# Sign the configured harness in. See scripts/harness-signin.sh for why this is
+# only the CONFIGURED one, why a non-interactive run reports instead of blocking,
+# and why it never fails the build.
+signin:
+	@$(NODE_ON_PATH); echo ""; echo "── sign-in ──"; 	  VENV=$(VENV) bash scripts/harness-signin.sh
 
 # What this host can actually serve, and the two things that are not a binary.
 doctor-harness:
