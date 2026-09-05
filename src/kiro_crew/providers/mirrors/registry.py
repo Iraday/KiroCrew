@@ -44,10 +44,11 @@ NO_MIRROR: dict[str, str] = {
         "no mirror"
     ),
     ACP_BACKEND_CODEX: (
-        "codex is in ACP_BACKENDS_KNOWN but not in BASELINE_SELECTABLE_BACKENDS, so "
-        "no build offers it and there is no session to configure. It has the same "
-        "gap claude had; when an edition registers a codex provider, its mirror goes "
-        "here and AcpClient._codex_session_mcp_servers returns it"
+        "codex is selectable, so this is a gap rather than a decision. Model, effort "
+        "and mode reach it over ACP session config, but nothing projects Crew's agent "
+        "spec, so a session carries no Crew MCP tools. The same gap claude had before "
+        "ClaudeCodeMirror; its mirror goes here and "
+        "AcpClient._codex_session_mcp_servers returns it"
     ),
 }
 
