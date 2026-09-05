@@ -356,7 +356,6 @@ src/kiro_crew/subagent_scale.py
 src/kiro_crew/suggestions.py
 src/kiro_crew/testing/channel_fixtures.py
 src/kiro_crew/testing/fake_acp_backend.py
-src/kiro_crew/tips.py
 src/kiro_crew/vector_memory.py
 src/kiro_crew/webhooks.py
 src/kiro_crew/weixin/client.py
@@ -397,7 +396,6 @@ test/test_agent_template_skills.py
 test/test_ai_agent_runner_coverage.py
 test/test_ai_backend_routes_coverage.py
 test/test_ai_pr_watchers_coverage.py
-test/test_ai_review_workflows.py
 test/test_ai_spine_driver_coverage.py
 test/test_api_agent_config_put_succeeds.py
 test/test_api_agents_order.py
