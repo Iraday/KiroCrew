@@ -312,12 +312,58 @@ isolated config root, which is a separate change: it has to carry credentials
 across (or CC cannot authenticate at all) while dropping exactly the `permissions`
 keys that bypass the gate.
 
+### Pointing the harness at a custom endpoint
+
+`ACP_BACKENDS_ANTHROPIC_BASE_URL` is the membership set of harnesses whose child
+reads `ANTHROPIC_BASE_URL` / `ANTHROPIC_API_KEY`. Claude is its only member;
+codex is deliberately absent, because it authenticates through Codex's own store
+and reads `OPENAI_*`, so membership would hand it an Anthropic key for nothing.
+
+`provider_guard.custom_endpoint_env(agent, backend)` builds that environment and
+`create_provider_factory` merges it **under** the caller's `extra_env`, so an
+explicit override still wins. The call is unconditional and returns `{}` on the
+membership test before reading, resolving or raising anything, so the Kiro
+construction path takes no branch and gains no failure mode (H13).
+
+Four config keys drive it, all on `AgentConfig`:
+
+- `provider_base_url` / `provider_api_key` — the endpoint and its credential.
+  The key is resolved by `provider_secrets.effective_provider_api_key`, whose
+  precedence is `KIROCREW_PROVIDER_API_KEY`, then the OS keyring (optional
+  dependency, service `kirocrew`), then the plaintext config field. Every reader
+  goes through that one function; reading the config field directly would
+  silently ignore an operator's keyring migration.
+- `safe_mode` — refuses to construct a provider when `provider_base_url`
+  resolves to a public address, and **fails closed** on a host that will not
+  resolve. Loopback, RFC1918, link-local and Tailscale CGNAT are permitted. A
+  single public A/AAAA record makes a split-horizon name public. It raises
+  rather than degrading: falling back to the harness default would reach the
+  public endpoint the gate exists to prevent.
+
+### The bundled Anthropic-to-OpenAI shim
+
+`kiro_crew.shim` is a loopback proxy that speaks Anthropic Messages on the front
+and forwards to any OpenAI-compatible `/v1/chat/completions` backend, so the
+Claude harness can drive Ollama, vLLM, LM Studio or DeepSeek with no external
+router. `agent.use_shim` turns it on; the shim then supplies `ANTHROPIC_BASE_URL`
+itself (`agent.shim_port`) and `provider_base_url` is unused.
+
+It binds `127.0.0.1` only and carries no authentication of its own, because it
+holds the backend credential — on a routable interface it is an open relay for
+that key. Translated: system prompts, multi-turn text, images, tool
+advertisement and tool calls both directions, and SSE streaming with Anthropic
+framing rebuilt from OpenAI deltas. Dropped after a once-per-process warning
+rather than half-honoured: `tool_choice` beyond `auto`, thinking blocks, and
+server-side tools. Token counting is a character-ratio heuristic that errs high,
+so context gating trips early rather than after an overflow.
+
 ### Standing rule
 
 Unchanged by Claude Code becoming selectable: `agent.provider` stays
 single-valued and **no provider selector is re-added**. The harness switch is
 `agent.acp_backend`, and it is gated in exactly one place
-(`resolve_selected_backend`).
+(`resolve_selected_backend`). A custom endpoint is configuration *on* a harness,
+never a second `agent.provider` value.
 
 ## Model registry
 

@@ -444,6 +444,20 @@ ACP_BACKENDS_ADVERTISED_MODEL_SELECTION = frozenset({ACP_BACKEND_CLAUDE})
 # member and takes no re-seed.
 ACP_BACKENDS_SEED_LOCAL_SETTINGS = frozenset({ACP_BACKEND_CLAUDE})
 
+# Backends whose child reads ``ANTHROPIC_BASE_URL`` / ``ANTHROPIC_API_KEY``, and
+# can therefore be pointed at a custom endpoint (a local router, an
+# OpenAI-compatible backend behind ``kiro_crew.shim``, or a hosted gateway).
+#
+# Opt-in rather than "every backend that is not kiro" for a reason with teeth
+# here: these two variables carry a CREDENTIAL into a subprocess environment.
+# A harness that reads different variables would inherit the base URL silently
+# (it ignores the value, so the session merely runs against the wrong endpoint
+# with nothing red), while a harness that reads these but authenticates
+# elsewhere would receive a key its operator never meant it to have. codex-acp
+# is deliberately absent: it authenticates through Codex's own store and reads
+# ``OPENAI_*``, so membership would hand it an Anthropic key for nothing.
+ACP_BACKENDS_ANTHROPIC_BASE_URL = frozenset({ACP_BACKEND_CLAUDE})
+
 # Which model-registry NAMESPACE a backend's ids live in. This is a registry index
 # key, NOT a provider-identity check (see agent_sdk.provider_identity, note 3): a
 # context window is a property of the MODEL, so the same model reached via two
