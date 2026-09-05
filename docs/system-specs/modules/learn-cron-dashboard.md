@@ -881,6 +881,16 @@ specified compatibility change.
   falsy test). The gate offers the switch itself by mounting the Developer
   panel's own `AgentBackendTab` on the setup screen, rather than reimplementing
   a picker that would drift from `acp_backends`.
+  **A status check that never ran is not a kiro verdict.** The frontend gate
+  renders the dashboard, not a setup screen, when the request fails with 401,
+  403 or 404. 404 is a gateway older than the endpoint. 401/403 are the
+  dashboard SESSION expiring, and blocking on them was a dead end by
+  construction: the remedy is to paste a fresh token into the app shell's
+  auth banner, which is precisely what the gate covers, so the screen told the
+  user to use a control it was hiding under a headline naming a binary nothing
+  had checked. Other failures (a live 5xx, an unusable body) still show the
+  retry screen for a user never seen to complete setup, because there the
+  gateway answered and the answer was unusable.
   **Probing is boot-and-explicit-action only.** The readiness probe (two
   `kiro-cli` spawns) runs ONCE per gateway, in `warm_up()` shortly after start,
   and thereafter only on an explicit user action: the gate's Refresh / Check

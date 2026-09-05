@@ -32,6 +32,16 @@ import { AgentBackendTab } from '../pages/developer/AgentBackendTab'
 import { i18nT } from '../i18n/t'
 const QUERY_KEY = ['kiro-prerequisite'] as const
 
+/**
+ * Status codes on which the gate renders the dashboard instead of a setup screen.
+ *
+ * Each is a failure of the REQUEST, never an answer about kiro-cli: 404 predates
+ * the endpoint, 401 and 403 are an expired or rejected dashboard session. A gate
+ * that blocks on these reports a kiro problem it never measured, and hides the
+ * only control that fixes the real one.
+ */
+const STATUS_CHECK_NOT_A_KIRO_VERDICT = [401, 403, 404]
+
 export function kiroPrerequisiteRefetchInterval(
   status: KiroPrerequisiteStatus | undefined,
 ): number | false {
@@ -842,13 +852,20 @@ export default function KiroPrerequisiteGate({ children }: { children: ReactNode
   }
   const prerequisite = statusQuery.data
 
-  // An older gateway has no prerequisite API and must retain its existing
-  // dashboard behavior.
+  // The check never reached a verdict ABOUT kiro-cli, so this screen has no kiro
+  // question to answer and must not claim one.
+  //
+  // 404 is a gateway older than the prerequisite API, which must keep its
+  // existing dashboard behavior. 401 and 403 are the SESSION failing, not the
+  // CLI — and blocking on them is a dead end by construction: the remedy is to
+  // paste a fresh token into the banner in the app shell, which is exactly what
+  // this gate would be covering. The screen would be telling the user to use a
+  // control it is hiding, under a headline naming a binary nothing checked.
   if (
     statusQuery.isError
     && !prerequisite
     && statusQuery.error instanceof ApiError
-    && statusQuery.error.status === 404
+    && STATUS_CHECK_NOT_A_KIRO_VERDICT.includes(statusQuery.error.status)
   ) {
     return <>{children}</>
   }

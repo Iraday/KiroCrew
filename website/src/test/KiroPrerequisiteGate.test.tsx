@@ -146,6 +146,25 @@ describe('KiroPrerequisiteGate', () => {
     expect(await screen.findByText('Dashboard loaded')).toBeInTheDocument()
   })
 
+  it.each([
+    [401, 'an expired session'],
+    [403, 'a rejected session'],
+  ])('renders the dashboard when the status check fails with %i (%s)', async (code) => {
+    // The screen this replaces was a dead end: it told the user to paste a token
+    // into a banner that lives in the app shell the gate was covering, under a
+    // headline blaming a binary the failed request never checked.
+    vi.mocked(api.kiroPrerequisite).mockRejectedValue(
+      new ApiError(code, 'Session expired. Run kirocrew token in a terminal.'),
+    )
+
+    renderWithProviders(
+      <KiroPrerequisiteGate><div>Dashboard loaded</div></KiroPrerequisiteGate>,
+    )
+
+    expect(await screen.findByText('Dashboard loaded')).toBeInTheDocument()
+    expect(screen.queryByText(/could not check Kiro CLI/i)).not.toBeInTheDocument()
+  })
+
   it('opens for an install whose chat harness is not kiro-cli', async () => {
     // The dead end this branch removes: the gate wraps the whole dashboard, so a
     // user who does not want kiro-cli could never reach the panel that switches
@@ -778,7 +797,10 @@ describe('KiroPrerequisiteGate', () => {
   })
 
   it('terminates an unpunctuated gateway error before the next sentence', async () => {
-    vi.mocked(api.kiroPrerequisite).mockRejectedValue(new ApiError(401, 'Token required'))
+    // 500, not 401: this pins `asSentence`, and the status is incidental to it.
+    // 401 now renders the dashboard (the session, not the CLI, is what failed),
+    // so reaching this screen at all needs a status the gate still blocks on.
+    vi.mocked(api.kiroPrerequisite).mockRejectedValue(new ApiError(500, 'Token required'))
 
     renderWithProviders(
       <KiroPrerequisiteGate><div>Dashboard loaded</div></KiroPrerequisiteGate>,
