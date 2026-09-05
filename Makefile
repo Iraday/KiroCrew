@@ -161,7 +161,7 @@ setup: build adapters signin doctor-harness
 # network round trip and a rebuild, and this target is meant to be re-runnable
 # on an established checkout without paying for three of them.
 adapters:
-	@$(NODE_ON_PATH); 	  if ! command -v npm >/dev/null 2>&1; then 	    echo "ERROR: npm not found. Run 'bash ensure-node.sh' first." >&2; exit 1; 	  fi; 	  for spec in $(ADAPTER_SPECS); do 	    bin="$${spec%%=*}"; pkg="$${spec#*=}"; 	    if command -v "$$bin" >/dev/null 2>&1; then 	      echo "  ✓ $$bin already installed"; 	    else 	      echo "  → installing $$pkg (provides $$bin)"; 	      npm i -g "$$pkg" --no-audit --no-fund >/dev/null || 	        echo "  ! could not install $$pkg — $$bin stays unavailable" >&2; 	    fi; 	  done
+	@$(NODE_ON_PATH); $(REQUIRE_NATIVE_NODE); 	  for spec in $(ADAPTER_SPECS); do 	    bin="$${spec%%=*}"; pkg="$${spec#*=}"; 	    if command -v "$$bin" >/dev/null 2>&1; then 	      echo "  ✓ $$bin already installed"; 	    else 	      echo "  → installing $$pkg (provides $$bin)"; 	      npm i -g "$$pkg" --no-audit --no-fund >/dev/null || 	        echo "  ! could not install $$pkg — $$bin stays unavailable" >&2; 	    fi; 	  done
 
 # Sign the configured harness in. See scripts/harness-signin.sh for why this is
 # only the CONFIGURED one, why a non-interactive run reports instead of blocking,
@@ -197,6 +197,22 @@ KIROCREW := $(VENV)/bin/kirocrew
 # at spawn -- a failure that looks like a harness problem and is not.
 NODE_ON_PATH = NBD="$$(cat "$${KIROCREW_HOME:-$$HOME/.kiro/crew}/node-bin-dir" 2>/dev/null || true)"; 	  { [ -z "$$NBD" ] || export PATH="$$NBD:$$PATH"; }
 
+# Refuse a Node reached over WSL interop, for the targets that spawn or install
+# with it.
+#
+# WSL appends the WHOLE Windows PATH by default (appendWindowsPath), and the
+# stock Ubuntu .bashrc returns early for a non-interactive shell -- so nvm, which
+# it loads a hundred lines further down, never runs under `bash -c` or `make`.
+# The result is a Linux shell with no Linux node and ~59 Windows PATH entries, so
+# `npm` resolves to /mnt/c/.../npm. Nothing errors: `npm i -g` installs into the
+# WINDOWS profile, and the adapter the gateway then spawns is a .exe shim the
+# Linux sandbox cannot execute. It surfaces much later as an authentication or
+# spawn failure that says nothing about PATH.
+#
+# The remedy is the marker above, which ensure-node.sh writes. Fail here rather
+# than silently do the right thing in the wrong operating system.
+REQUIRE_NATIVE_NODE = _npm="$$(command -v npm 2>/dev/null || true)"; case "$$_npm" in /mnt/*) echo "ERROR: npm resolves to $$_npm - a Windows binary reached over WSL interop." >&2; echo "       It writes to the Windows profile and yields adapters the Linux sandbox cannot run." >&2; echo "       Fix: bash ensure-node.sh   (records the native node for make)" >&2; exit 1;; "") echo "ERROR: no npm on PATH. Fix: bash ensure-node.sh" >&2; exit 1;; esac
+
 stop:
 	@$(NODE_ON_PATH); $(KIROCREW) stop 2>/dev/null || echo "  → no gateway was running"
 
@@ -215,7 +231,7 @@ use:
 	@$(NODE_ON_PATH); 	  if [ -z "$(BACKEND)" ]; then 	    echo "usage: make use backend=<codex|claude|kiro|kas>" >&2; exit 2; 	  fi; 	  VENV=$(VENV) bash scripts/select-harness.sh "$(BACKEND)"
 
 start: stop
-	@$(NODE_ON_PATH); 	  if [ -n "$(BACKEND)" ]; then 	    VENV=$(VENV) bash scripts/select-harness.sh "$(BACKEND)" || exit 1; 	  fi; 	  exec $(KIROCREW) gateway
+	@$(NODE_ON_PATH); $(REQUIRE_NATIVE_NODE); 	  if [ -n "$(BACKEND)" ]; then 	    VENV=$(VENV) bash scripts/select-harness.sh "$(BACKEND)" || exit 1; 	  fi; 	  exec $(KIROCREW) gateway
 
 restart: start
 

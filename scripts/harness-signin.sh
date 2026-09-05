@@ -98,10 +98,25 @@ fi
 # when PATH would have chosen a different one. Guessing silently is what turned
 # both of these into long hunts.
 _adapter_bundled_codex() {
-  root="$(npm root -g 2>/dev/null)" || return 1
-  [ -n "$root" ] || return 1
-  find "$root/@agentclientprotocol/codex-acp/node_modules" \
-    -path '*vendor*/bin/codex' -type f 2>/dev/null | head -1
+  # Resolved from the codex-acp binary the gateway actually spawns, NOT from
+  # `npm root -g`. That command is untrustworthy in exactly the environment this
+  # runs in: under WSL, `npm` is frequently the WINDOWS npm reached over interop
+  # (the stock Ubuntu .bashrc returns early for non-interactive shells, so nvm
+  # never loads, while ~59 Windows PATH entries remain), and it then answers with
+  # a Windows path under the user profile. The find below it matches nothing, the
+  # caller falls back to whatever `codex` PATH offers, and a snap copy reports
+  # "Logged in" while the adapter holds no credential at all -- the exact chain
+  # that made a correct login look like a broken one.
+  acp="$(command -v codex-acp 2>/dev/null)" || return 1
+  [ -n "$acp" ] || return 1
+  case "$acp" in
+    /mnt/*) return 1 ;;  # a Windows shim: its node_modules are not ours to use
+  esac
+  # bin/codex-acp -> ../lib/node_modules/@agentclientprotocol/codex-acp/dist/index.js
+  entry="$(readlink -f "$acp" 2>/dev/null)" || return 1
+  pkg="${entry%/dist/*}"
+  [ -d "$pkg/node_modules" ] || return 1
+  find "$pkg/node_modules" -path '*vendor*/bin/codex' -type f 2>/dev/null | head -1
 }
 
 resolve_harness_bin() {

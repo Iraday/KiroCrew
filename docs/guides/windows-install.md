@@ -222,6 +222,49 @@ over `Scripts\kirocrew.exe` (whose embedded interpreter path names the build
 machine) and is unwrapped to `<root>\python.exe -P -s -m kiro_crew <sub>` when
 spawned.
 
+## Running under WSL: the Windows PATH leaks in, and nvm does not
+
+WSL is the supported way to run the agent on a Windows box, because Windows has
+no OS-level sandbox backend and Linux user namespaces give it a real one. But two
+defaults combine into a trap that produces failures pointing anywhere except the
+cause.
+
+**WSL appends the entire Windows PATH.** With no `appendWindowsPath` setting in
+`/etc/wsl.conf` it defaults to true, so a Linux shell can carry ~59 `/mnt/c/...`
+entries. Every Windows executable is reachable by its bare name.
+
+**The stock Ubuntu `~/.bashrc` returns early for a non-interactive shell**, and
+loads nvm about a hundred lines below that guard. So nvm runs in an interactive
+terminal and never under `bash -c`, `bash -lc`, `make`, or anything a script
+invokes. A machine whose only Node came from nvm therefore has **no Linux Node at
+all** in exactly the shells that build and spawn things.
+
+Together: `npm` resolves to `/mnt/c/Program Files/nodejs/npm`, `npm root -g`
+answers with a Windows path, and `npm i -g` installs into the Windows profile.
+Nothing errors. The adapters the gateway then spawns are `.exe` shims the Linux
+sandbox cannot execute, and the first symptom is an authentication or spawn
+failure that says nothing about PATH. One observed instance cost hours: a snap
+`codex` shadowed the npm one, a sign-in check fell back to it, and it reported
+"Logged in" while the adapter held no credential.
+
+**The fix is the `node-bin-dir` marker.** `ensure-node.sh` records the native Node
+bin directory under the data home, and the `Makefile` prepends it before doing
+anything with Node. Run it once per WSL install:
+
+```bash
+cd ~/KiroCrew && bash ensure-node.sh
+```
+
+`make adapters` and `make start` refuse outright when `npm` still resolves under
+`/mnt/`, rather than installing into the wrong operating system. Resolution of a
+harness's own binaries follows the same rule: never `npm root -g`, always the
+adapter binary the gateway spawns (`scripts/harness-signin.sh`).
+
+Setting `appendWindowsPath=false` in `/etc/wsl.conf` removes the leak at the
+source and is a reasonable choice, but it also stops `explorer.exe`, `code` and
+other Windows tools working from the shell, so it is the operator's call rather
+than something the install performs.
+
 ## Kiro sandbox delegation and the unsandboxed-exec opt-in
 
 Windows has no Kiro Crew OS sandbox backend. The official Kiro CLI does have its
