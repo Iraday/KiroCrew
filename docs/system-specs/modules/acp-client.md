@@ -503,6 +503,17 @@ Subprocess lifecycle:
   carry that error. These sites authorize on a **freshly verified** probe
   (`verified_ready`, 30s ceiling), never the bare latch — a stale `ready=True`
   would green-light exactly the signed-out spawn the gate exists to prevent.
+  The gate is also **scoped to installs that run the binary at all**
+  (`install_depends_on_kiro_cli`): every hazard above is a `kiro-cli` hazard, so
+  on an install whose `agent.acp_backend` and `agent.member_acp_backend` both sit
+  outside `ACP_BACKENDS_KIRO_IDENTITY_STORE` these endpoints are not gated —
+  otherwise a Claude- or Codex-only gateway answers a permanent 503 on endpoints
+  its harness serves fine, for want of a binary it never spawns. Positive
+  membership, and fail-closed: an unreadable config, a missing field, or the
+  empty-string value `_normalize_acp_backend` produces for anything unknown all
+  land back on "gate it". Note that a Claude chat backend alone is not enough to
+  leave the scope, because `member_acp_backend` defaults to KAS, which is
+  kiro-cli's own relay.
 - **`AcpAuthRequired` is the authoritative logout signal.** Readiness is probed
   at gateway start and on explicit user action only, so a mid-session sign-out is
   discovered when the ACP attempt fails, not by a poll. `AcpRuntime`/`AcpClient`
