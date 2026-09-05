@@ -784,11 +784,14 @@ class AgentConfig:
         default=False,
         metadata=_meta(
             "Anthropic Shim Proxy",
-            "Start the built-in loopback proxy that accepts Anthropic "
-            "/v1/messages requests and forwards them to an OpenAI-compatible "
-            "backend at shim_openai_base_url. Lets the Claude harness drive "
-            "Ollama, vLLM, LM Studio or DeepSeek with no external router. When "
-            "on, the shim supplies the base URL and provider_base_url is unused.",
+            "Route the Claude harness through the built-in loopback proxy, "
+            "which accepts Anthropic /v1/messages requests and forwards them to "
+            "an OpenAI-compatible backend at shim_openai_base_url (Ollama, "
+            "vLLM, LM Studio, DeepSeek) with no external router. When on, the "
+            "shim supplies the base URL and provider_base_url is unused. "
+            "INCOMPLETE: nothing starts the proxy yet, so turning this on points "
+            "sessions at a port with no listener. Leave it off until the "
+            "gateway owns the shim's lifecycle.",
         ),
     )
     shim_port: int = field(

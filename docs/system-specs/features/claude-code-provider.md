@@ -345,8 +345,15 @@ Four config keys drive it, all on `AgentConfig`:
 `kiro_crew.shim` is a loopback proxy that speaks Anthropic Messages on the front
 and forwards to any OpenAI-compatible `/v1/chat/completions` backend, so the
 Claude harness can drive Ollama, vLLM, LM Studio or DeepSeek with no external
-router. `agent.use_shim` turns it on; the shim then supplies `ANTHROPIC_BASE_URL`
-itself (`agent.shim_port`) and `provider_base_url` is unused.
+router. `agent.use_shim` routes to it; the shim then supplies
+`ANTHROPIC_BASE_URL` itself (`agent.shim_port`) and `provider_base_url` is unused.
+
+**The lifecycle is not wired yet.** `start_shim` has no caller: nothing in the
+gateway binds the listener or tears it down, so `agent.use_shim` currently points
+sessions at a port with nothing on it. The flag and its config description say so,
+and the remaining work is one start/stop pair on the gateway's app lifecycle
+alongside the other `on_cleanup` hooks. The translation layer itself is complete
+and covered by tests.
 
 It binds `127.0.0.1` only and carries no authentication of its own, because it
 holds the backend credential — on a routable interface it is an open relay for
