@@ -11,13 +11,13 @@ from pathlib import Path
 from typing import Any
 
 from kiro_crew.acp.client import (
-    not_logged_in_message,
     DEFAULT_MODEL,
     AcpAuthRequired,
     AcpClient,
     AcpError,
     advertised_model_ids,
     model_is_unusable,
+    not_logged_in_message,
     resolve_pin_spelling,
 )
 from kiro_crew.acp.runtime import AcpRuntime, AcpRuntimeError
