@@ -12,9 +12,11 @@
 #
 # Running it locally:
 #   make start     — stop any running gateway, then run one in this terminal
+#   make start backend=codex   — same, after switching harness (also: claude, kiro, kas)
+#   make use backend=claude    — switch harness without starting anything
 #   make stop      — stop a running gateway
 #   make restart   — same as start (stop is already unconditional)
-.PHONY: all build frontend backend test clean wheel backend-bin desktop \n        start stop restart status token logs setup adapters signin doctor-harness
+.PHONY: all build frontend backend test clean wheel backend-bin desktop \n        start stop restart status token logs setup adapters signin doctor-harness use
 
 PY ?= python3
 VENV := .venv
@@ -188,8 +190,22 @@ NODE_ON_PATH = NBD="$$(cat "$${KIROCREW_HOME:-$$HOME/.kiro/crew}/node-bin-dir" 2
 stop:
 	@$(NODE_ON_PATH); $(KIROCREW) stop 2>/dev/null || echo "  → no gateway was running"
 
+# Which harness to drive, named the way a governance rule names it: `codex`,
+# `claude`, `kas`, or `kiro`. Empty leaves the configured one alone, so a bare
+# `make start` never rewrites config.
+#
+# `agent=` is accepted as an alias because it is the word people reach for, but
+# `backend=` is the name to prefer: this repo already uses "agent" for a Crew
+# agent definition (`kirocrew agent`, `--agent`, `agent.default`), which is a
+# different thing that is also selected per session.
+BACKEND := $(if $(backend),$(backend),$(agent))
+
+# Switch harness without starting anything.
+use:
+	@$(NODE_ON_PATH); 	  if [ -z "$(BACKEND)" ]; then 	    echo "usage: make use backend=<codex|claude|kiro|kas>" >&2; exit 2; 	  fi; 	  VENV=$(VENV) bash scripts/select-harness.sh "$(BACKEND)"
+
 start: stop
-	@$(NODE_ON_PATH); exec $(KIROCREW) gateway
+	@$(NODE_ON_PATH); 	  if [ -n "$(BACKEND)" ]; then 	    VENV=$(VENV) bash scripts/select-harness.sh "$(BACKEND)" || exit 1; 	  fi; 	  exec $(KIROCREW) gateway
 
 restart: start
 
