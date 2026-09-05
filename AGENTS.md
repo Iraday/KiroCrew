@@ -58,8 +58,9 @@ in the **same commit** when you change what it documents.
 | CI, PR flow, review gates | [ci-and-reviews](docs/ci/ci-and-reviews.md) + [CONTRIBUTING.md](CONTRIBUTING.md) |
 | constants, magic numbers, where a limit lives | [code-style](docs/system-specs/common/code-style.md) |
 | injected `[Cron notification]` / `[Subagent completion event]` | [injected-messages](docs/system-specs/common/injected-messages.md) |
-| build, install, dev mode | [CONTRIBUTING.md](CONTRIBUTING.md) + [install](docs/guides/install.md) |
-| Windows / cross-platform process, signal, lock, metrics | [windows-install](docs/guides/windows-install.md) + the shim table below |
+| build, install, dev mode | [CONTRIBUTING.md](CONTRIBUTING.md) + [install](docs/guides/install.md); on Windows also [windows-install](docs/guides/windows-install.md) |
+| Windows: process, signal, lock, metrics; **or running under WSL at all** | [windows-install](docs/guides/windows-install.md) + the shim table below |
+| a Node, npm or harness binary resolving to `/mnt/c/...` under WSL | [windows-install § Running under WSL](docs/guides/windows-install.md) |
 | merging upstream into this fork, or resolving a sync conflict | [upstream-sync](docs/guides/upstream-sync.md) |
 | a release, or `CHANGELOG.md` | [release](docs/build/release.md) |
 | errors, retries, user-facing failure text | [error-handling](docs/system-specs/common/error-handling.md) |

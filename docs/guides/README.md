@@ -8,7 +8,7 @@ system is built, see [../architecture/](../architecture/README.md).
 | [install.md](install.md) | Installing and building Kiro Crew: source, wheel, and first run. |
 | [upstream-sync.md](upstream-sync.md) | Merging `kirodotdev/KiroCrew` into this fork: the procedure, and the register of what must survive the merge. |
 | [worktree-verification-recipes.md](worktree-verification-recipes.md) | Copy-pasteable backend, frontend, agent-driving, diagnosis, and reclamation traces against an isolated worktree pod. |
-| [windows-install.md](windows-install.md) | Native Windows setup, and the per-feature status on Windows. |
+| [windows-install.md](windows-install.md) | Native Windows setup, the per-feature status on Windows, and running under WSL: why the sandbox needs it, and the PATH/nvm interop trap that hands you Windows binaries inside Linux. |
 | [macos-troubleshooting.md](macos-troubleshooting.md) | macOS desktop app issues — a CLI that resolves in Terminal but is `command not found` inside the app, and the `launchctl setenv PATH` recipe that fixes it. |
 | [docker.md](docker.md) | Running Kiro Crew as a container. |
 | [docker-troubleshooting.md](docker-troubleshooting.md) | Diagnosing common Docker deployment issues. |
