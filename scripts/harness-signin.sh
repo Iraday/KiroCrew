@@ -79,6 +79,76 @@ if [ "$login_cmd" = "-" ]; then
   exit 0
 fi
 
+# ── Which binary, not just which command ──
+#
+# A bare name resolved through PATH is NOT good enough here, because a sign-in
+# writes to a credential store and the wrong binary writes to the wrong one. Both
+# failures have been observed on a working install:
+#
+# * A snap `codex` shadows the npm one on PATH. Snap confines it to a private
+#   home, so `codex login` succeeds, reports "Logged in", and leaves
+#   ~/snap/codex/<rev>/auth.json — which the ACP adapter cannot read. The adapter
+#   runs a Codex bundled inside its own node_modules that reads ~/.codex, so the
+#   session stays signed out while the CLI insists otherwise.
+# * A `claude` reached over WSL interop (/mnt/c/...) reads the WINDOWS config. It
+#   reports a login the sandboxed Linux child cannot see, because the sandbox
+#   correctly denies /mnt.
+#
+# So resolve the binary whose store the HARNESS actually uses, and say plainly
+# when PATH would have chosen a different one. Guessing silently is what turned
+# both of these into long hunts.
+_adapter_bundled_codex() {
+  root="$(npm root -g 2>/dev/null)" || return 1
+  [ -n "$root" ] || return 1
+  find "$root/@agentclientprotocol/codex-acp/node_modules" \
+    -path '*vendor*/bin/codex' -type f 2>/dev/null | head -1
+}
+
+resolve_harness_bin() {
+  bare="$1"
+  on_path="$(command -v "$bare" 2>/dev/null || true)"
+  case "$policy_id" in
+    codex)
+      # Prefer the bundled binary unconditionally -- it is the one the adapter
+      # runs, so its store is the session's store by construction. But only WARN
+      # when the PATH copy would have used a DIFFERENT store, which is what
+      # actually costs the user a wasted login. An ordinary npm/global codex
+      # reads the same ~/.codex and is a perfectly good place to sign in; saying
+      # otherwise would be the same over-claim in the other direction.
+      bundled="$(_adapter_bundled_codex)"
+      if [ -n "$bundled" ]; then
+        case "$on_path" in
+          /snap/*)
+            echo "  ! '$bare' on PATH is $on_path — a snap, which is confined to" >&2
+            echo "    its own home (~/snap/codex/<rev>/). A login there succeeds and" >&2
+            echo "    reports 'Logged in', but writes a credential the adapter cannot" >&2
+            echo "    read, so the session stays signed out." >&2
+            echo "    Signing in with the adapter's own Codex instead." >&2
+            ;;
+          /mnt/*)
+            echo "  ! '$bare' on PATH is $on_path — reached over interop, so it uses" >&2
+            echo "    the host's config, which the Linux sandbox denies." >&2
+            echo "    Signing in with the adapter's own Codex instead." >&2
+            ;;
+        esac
+        echo "$bundled"
+        return 0
+      fi
+      ;;
+    claude)
+      case "$on_path" in
+        /mnt/*)
+          echo "  ! '$bare' on PATH is $on_path — a Windows binary reached over" >&2
+          echo "    interop. It reads the Windows config, which the Linux sandbox" >&2
+          echo "    denies, so a login there is invisible to the session." >&2
+          echo "    Install the native one: npm i -g @anthropic-ai/claude-code" >&2
+          ;;
+      esac
+      ;;
+  esac
+  [ -n "$on_path" ] && echo "$on_path"
+}
+
 # ── Is it already signed in? ──
 #
 # Per-harness, because the shapes genuinely differ and a uniform exit-code test
@@ -88,9 +158,11 @@ fi
 # script exists to run.
 signed_in="unknown"
 if [ "$status_cmd" != "-" ]; then
-  status_bin="${status_cmd%% *}"
-  if command -v "$status_bin" >/dev/null 2>&1; then
-    out="$($status_cmd 2>&1)"; rc=$?
+  status_bin="$(resolve_harness_bin "${status_cmd%% *}")"
+  status_args="${status_cmd#* }"
+  if [ -n "$status_bin" ]; then
+    # shellcheck disable=SC2086 # args are our own constants, word splitting intended
+    out="$("$status_bin" $status_args 2>&1)"; rc=$?
     case "$policy_id" in
       claude)
         case "$out" in
@@ -103,7 +175,7 @@ if [ "$status_cmd" != "-" ]; then
         ;;
     esac
   else
-    echo "  ! '$status_bin' is not on PATH — cannot check sign-in state"
+    echo "  ! '${status_cmd%% *}' is not on PATH — cannot check sign-in state"
   fi
 fi
 
@@ -112,11 +184,25 @@ if [ "$signed_in" = "yes" ]; then
   exit 0
 fi
 
-login_bin="${login_cmd%% *}"
-if ! command -v "$login_bin" >/dev/null 2>&1; then
-  echo "  ! '$login_bin' is not on PATH, so '$login_cmd' cannot run."
+# The same resolution the status check used, for the same reason: this is the
+# call that WRITES a credential, so running the wrong binary is the failure that
+# costs the most to diagnose -- it succeeds, it says "Logged in", and the session
+# stays signed out.
+login_bin="$(resolve_harness_bin "${login_cmd%% *}" 2>/dev/null)"
+login_args="${login_cmd#* }"
+if [ -z "$login_bin" ]; then
+  echo "  ! '${login_cmd%% *}' is not on PATH, so '$login_cmd' cannot run."
   echo "    Install that harness's CLI first, then re-run: make signin"
   exit 0
+fi
+
+# What the user would have to type to reproduce this by hand. Spelled with the
+# resolved path when it differs from the bare name, because "run codex login"
+# is exactly the advice that sends someone to the snap copy.
+if [ "$login_bin" = "$(command -v "${login_cmd%% *}" 2>/dev/null)" ]; then
+  login_display="$login_cmd"
+else
+  login_display="$login_bin $login_args"
 fi
 
 # A login is an interactive OAuth round trip. Without a terminal there is nobody
@@ -131,24 +217,25 @@ if [ ! -t 0 ] || [ ! -t 1 ]; then
   else
     echo "  → sign-in state unknown. No terminal attached, so nothing is started."
   fi
-  echo "    Run it yourself:  $login_cmd"
+  echo "    Run it yourself:  $login_display"
   exit 0
 fi
 
 if [ "$signed_in" = "no" ]; then
-  echo "  → not signed in. Starting '$login_cmd' — complete it in the browser."
+  echo "  → not signed in. Starting '$login_display' — complete it in the browser."
 else
-  echo "  → sign-in state unknown. Starting '$login_cmd' — complete it in the browser."
+  echo "  → sign-in state unknown. Starting '$login_display' — complete it in the browser."
 fi
 echo ""
 # Not captured and not piped: the harness draws its own prompts and needs the
 # terminal. Its failure is reported, never fatal — an aborted login leaves an
 # install that is otherwise finished.
-if $login_cmd; then
+# shellcheck disable=SC2086 # args are our own constants, word splitting intended
+if "$login_bin" $login_args; then
   echo ""
-  echo "  ✓ '$login_cmd' finished"
+  echo "  ✓ '$login_display' finished"
 else
   echo ""
-  echo "  ! '$login_cmd' did not complete. Re-run it yourself, or: make signin" >&2
+  echo "  ! '$login_display' did not complete. Re-run it yourself, or: make signin" >&2
 fi
 exit 0
