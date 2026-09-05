@@ -4208,6 +4208,16 @@ class KiroCrewConfig:
                 self.agent.member_acp_backend,
                 self.agent.acp_backend,
             )
+            # Custom-endpoint environment for a harness that reads it, merged
+            # UNDER the caller's extra_env so an explicit override still wins.
+            # Called unconditionally and empty for every non-member, so the kiro
+            # path takes no branch and gains no failure mode (harness-parity H13).
+            from kiro_crew.provider_guard import custom_endpoint_env
+
+            _endpoint_env = custom_endpoint_env(self.agent, _backend)
+            if _endpoint_env:
+                extra_env = {**_endpoint_env, **(extra_env or {})}
+
             return AcpProvider(
                 work_dir=wdir,
                 model=m,

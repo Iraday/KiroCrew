@@ -17,15 +17,24 @@ latched value can be arbitrarily stale. That splits the callers in two:
   history by the time the turn fails. See
   ``docs/system-specs/modules/acp-client.md`` § "Poll-driven spawn sites are
   readiness-gated".
+
+Both bullets are about **kiro-cli**, and that is the whole scope of this module.
+An install whose selected harnesses never spawn it is not gated
+(:func:`install_depends_on_kiro_cli`): the readiness of a binary nothing runs is
+not a fact any of these endpoints should turn into a 503. That test fails closed,
+so the gate is only skipped where the config positively says no kiro-dependent
+harness is selected.
 """
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import time
 
 from aiohttp import web
 
+from kiro_crew.acp_backends import ACP_BACKENDS_KIRO_IDENTITY_STORE
 from kiro_crew.kiro_prerequisite import KiroPrerequisiteService
 
 logger = logging.getLogger(__name__)
@@ -215,6 +224,42 @@ def _service(request: web.Request) -> object:
     return service
 
 
+async def install_depends_on_kiro_cli() -> bool:
+    """Whether any harness this install selects needs a ready, signed-in kiro-cli.
+
+    Every hazard :func:`reject_if_kiro_unverified` guards is a **kiro-cli**
+    hazard: a poll that shells out to it and opens an interactive browser login,
+    or a durable history rewrite whose turn then dies on ``AcpAuthRequired``. On
+    an install that never spawns kiro-cli, its readiness answers a question
+    nobody asked, and the gate turns into a permanent 503 on endpoints the
+    selected harness can serve perfectly well.
+
+    Positive membership in ``ACP_BACKENDS_KIRO_IDENTITY_STORE`` (harness-parity
+    H5/H6), not a negation: a harness added later must join the set to be gated,
+    which is the direction that fails safe. Both harness fields count, because a
+    crew-member DM session spawns one just as a chat session does, and KAS is
+    kiro-cli's own relay rather than a second binary.
+
+    **Fails CLOSED.** An unreadable config, a load error, or a missing field all
+    answer ``True``. So does any degraded value: ``ACP_BACKEND_KIRO`` is the
+    empty string and is IN the set, so the value ``_normalize_acp_backend``
+    produces for anything unknown lands on "gate it" without a special case.
+
+    ``KiroCrewConfig.load()`` is stat-cached, but a cold read parses and
+    validates JSON, so it runs off the loop like every other config read on a
+    polled path.
+    """
+    try:
+        from kiro_crew.config.loader import KiroCrewConfig
+
+        cfg = await asyncio.to_thread(KiroCrewConfig.load)
+        selected = (cfg.agent.acp_backend, cfg.agent.member_acp_backend)
+    except Exception:
+        logger.debug("kiro readiness: config unreadable, gating as kiro-dependent", exc_info=True)
+        return True
+    return any(backend in ACP_BACKENDS_KIRO_IDENTITY_STORE for backend in selected)
+
+
 async def reject_if_kiro_unverified(request: web.Request) -> web.Response | None:
     """Return 503 for the endpoints that must fail closed on a stale latch.
 
@@ -245,8 +290,16 @@ async def reject_if_kiro_unverified(request: web.Request) -> web.Response | None
     :func:`kiro_verified_ready` — a stale ``ready=True`` is as dangerous as a
     stale ``ready=False`` here (it authorizes the history rewrite or the
     browser-opening spawn), and only these paths pay for the re-probe.
+
+    All three classes are kiro-cli hazards, so an install that selects no
+    kiro-dependent harness is not gated at all — see
+    :func:`install_depends_on_kiro_cli`, which fails closed. That test runs
+    FIRST: it is the cheaper of the two, and on such an install it also spares
+    the re-probe a spawn nobody is waiting on.
     """
 
+    if not await install_depends_on_kiro_cli():
+        return None
     if await kiro_verified_ready(_service(request)):
         _clear_refusal_warning()
         return None

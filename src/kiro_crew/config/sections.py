@@ -747,6 +747,78 @@ class AgentConfig:
             # frozen literal.
         ),
     )
+    provider_base_url: str = field(
+        default="",
+        metadata=_meta(
+            "Provider Base URL",
+            "ANTHROPIC_BASE_URL for a harness that reads it (currently the "
+            "Claude backend). Empty inherits the environment, which is the "
+            "harness's own default endpoint. Point it at a local router or at "
+            "the built-in shim to drive a different model. Ignored by a harness "
+            "that authenticates through its own store, such as codex.",
+        ),
+    )
+    provider_api_key: str = field(
+        default="",
+        metadata=_meta(
+            "Provider API Key",
+            "ANTHROPIC_API_KEY forwarded to the endpoint at provider_base_url. "
+            "Empty inherits the environment. Resolution order is "
+            "KIROCREW_PROVIDER_API_KEY, then the OS keyring, then this field, so "
+            "prefer either of the first two on a shared machine.",
+            sensitive=True,
+        ),
+    )
+    safe_mode: bool = field(
+        default=False,
+        metadata=_meta(
+            "Safe Mode",
+            "Refuse to start a session when provider_base_url resolves to a "
+            "public address, failing closed on a host that cannot be resolved. "
+            "Loopback, RFC1918, link-local and Tailscale (100.64.0.0/10) "
+            "endpoints are always permitted. A guardrail against a typo pointing "
+            "the agent, and the credentials it holds, at an arbitrary router.",
+        ),
+    )
+    use_shim: bool = field(
+        default=False,
+        metadata=_meta(
+            "Anthropic Shim Proxy",
+            "Route the Claude harness through the built-in loopback proxy, "
+            "which accepts Anthropic /v1/messages requests and forwards them to "
+            "an OpenAI-compatible backend at shim_openai_base_url (Ollama, "
+            "vLLM, LM Studio, DeepSeek) with no external router. When on, the "
+            "shim supplies the base URL and provider_base_url is unused. "
+            "INCOMPLETE: nothing starts the proxy yet, so turning this on points "
+            "sessions at a port with no listener. Leave it off until the "
+            "gateway owns the shim's lifecycle.",
+        ),
+    )
+    shim_port: int = field(
+        default=8787,
+        metadata=_meta(
+            "Shim: Port",
+            "Loopback port the built-in Anthropic shim binds. Changed only on a "
+            "collision; the shim is never reachable off this host.",
+        ),
+    )
+    shim_openai_base_url: str = field(
+        default="http://127.0.0.1:11434/v1",
+        metadata=_meta(
+            "Shim: OpenAI Base URL",
+            "Where the built-in shim forwards translated requests. Any "
+            "OpenAI-compatible endpoint works; the default is Ollama's.",
+        ),
+    )
+    shim_openai_api_key: str = field(
+        default="",
+        metadata=_meta(
+            "Shim: OpenAI API Key",
+            "Bearer token the built-in shim sends to the OpenAI-compatible "
+            "backend. Empty is correct for a local Ollama or llama.cpp server.",
+            sensitive=True,
+        ),
+    )
     default_agent: str = field(
         default="",
         metadata=_meta("Default Agent", "Default agent name for new sessions."),
