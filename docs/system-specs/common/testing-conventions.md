@@ -698,6 +698,32 @@ rest of the list, which is why a single-file run needs no `--override-ini` at al
 | Small-RAM laptop | Run a subset. For a full run, let the budget clamp `-n auto` and expect it to be slow; do not raise it. |
 | Checkpoint before committing | `scripts/check_black_formatting.py && scripts/check_subprocess_encoding.py && isort && flake8 && mypy && python -m pytest` |
 
+## Known red on a Windows dev host
+
+These fail on a Windows checkout and **pass on Linux**, verified by running the
+same commit in both. They are properties of the host, not of your change, and
+re-diagnosing them costs more than reading this table. Confirm a failure is one
+of these by checking out the merge base and re-running it there; if it fails on
+both, it is yours.
+
+| What fails | Why | On Linux |
+|---|---|---|
+| `test_harness_parity.py::test_added_line_gate_reports_without_enforcing` | The gate subprocess's `result.stdout` comes back `None` (a `_readerthread` exception), so the assertion gets `None` rather than text. The gate script itself exits 0 and prints correctly when run directly. | passes |
+| `test_security.py::TestKeystonePublishArtifacts::test_a_symlink_aimed_at_a_live_temp_is_caught` | Creating a symlink needs elevation on Windows (`WinError 1314`) — the same reason `platform_compat` routes links through `symlink_or_junction`. | passes |
+| `test_security.py::TestIsSensitiveBashCommand::test_chained_cd_expansions_do_not_blow_up_the_gate` | POSIX shell expansion the host does not reproduce. | passes |
+
+`scripts/scrub-lint.sh` also fails its fifth step on **any** host: ~1625 commits in
+the inherited history carry internal author emails. Steps 1-4 (working tree,
+aliases, identity, credentials) are the ones a change can actually break, and they
+pass. Treat a step-5 failure as the baseline unless the count MOVED — compare it
+against the merge base rather than reading it as new.
+
+Not a host issue but the same trap: `mypy` reports three
+`"ClientWebSocketResponse" expects no type arguments` errors in
+`src/kiro_crew/wecom/client.py` on **aiohttp < 3.14**, where that class is not yet
+generic. A venv on 3.14+ is clean. Check `aiohttp.__version__` before treating it
+as a real finding, and remember the separate `--platform linux` rule below.
+
 ## Determinism: the five flake classes
 
 A test that fails on CI but not locally is almost always one of these. Each has one

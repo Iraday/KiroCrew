@@ -400,6 +400,13 @@ Gates you will trip:
 | mypy | annotate empty collections (`output: list[str] = []`) |
 | pytest | `asyncio: mode=strict`, so every async test needs `@pytest.mark.asyncio` |
 
+**Some of these are red before you start.** Three tests fail on a Windows dev
+host and pass on Linux, `scrub-lint.sh` step 5 fails on every host over inherited
+history, and `mypy` reports three `wecom/client.py` errors on aiohttp < 3.14.
+Check them against
+[testing-conventions § Known red on a Windows dev host](docs/system-specs/common/testing-conventions.md)
+before spending anything diagnosing one, and confirm with the merge base.
+
 Never fix a flake with a rerun, a longer `sleep`, or a weakened assertion. Read
 [testing-conventions](docs/system-specs/common/testing-conventions.md) § Determinism
 for the five flake classes and the one correct fix for each. In particular, a timing
