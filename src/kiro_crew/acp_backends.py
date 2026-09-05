@@ -173,7 +173,11 @@ BACKEND_LOGIN_COMMAND: dict = {
     ACP_BACKEND_KIRO: "kiro-cli login",
     # KAS is served by kiro-cli's own ACP relay, so it is the same sign-in.
     ACP_BACKEND_KAS: "kiro-cli login",
-    ACP_BACKEND_CLAUDE: "claude /login",
+    # ``claude auth login``, NOT ``claude /login``: the slash form is a command of
+    # the interactive TUI, so from a shell it is just a prompt string and signs
+    # nothing in. A user following that advice gets no error, no credential, and a
+    # harness that still reports a stale session on the next turn.
+    ACP_BACKEND_CLAUDE: "claude auth login",
     ACP_BACKEND_CODEX: "codex login",
 }
 
@@ -181,11 +185,13 @@ BACKEND_LOGIN_COMMAND: dict = {
 #: or an assisting agent to run. Absent for a harness with no such command --
 #: an entry here is a claim that the command exists and is non-mutating, so a
 #: guess would send someone to a command that does not exist or, worse, starts
-#: an interactive login. Claude has no equivalent read-only status subcommand,
-#: so it has no entry rather than an approximate one.
+#: an interactive login.
 BACKEND_AUTH_STATUS_COMMAND: dict = {
     ACP_BACKEND_KIRO: "kiro-cli whoami",
     ACP_BACKEND_KAS: "kiro-cli whoami",
+    # Reports JSON on stdout and mutates nothing, which is what earns it a place
+    # here: it answers "is this harness signed in" without starting a login.
+    ACP_BACKEND_CLAUDE: "claude auth status",
     ACP_BACKEND_CODEX: "codex login status",
 }
 

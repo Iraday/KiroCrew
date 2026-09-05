@@ -87,7 +87,7 @@ sign-in, which Kiro Crew never performs for you:
 
 | Backend | Install | Sign in |
 |---------|---------|---------|
-| Claude Code | `npm i -g @agentclientprotocol/claude-agent-acp` plus the `claude` CLI | `claude /login` |
+| Claude Code | `npm i -g @agentclientprotocol/claude-agent-acp` plus the `claude` CLI | `claude auth login`, then `claude auth status` to verify |
 | Codex | `npm i -g @agentclientprotocol/codex-acp` (ships its own Codex) | `codex login`, then `codex login status` to verify |
 
 `kirocrew doctor` reports which adapters are installed. Installed is not the same

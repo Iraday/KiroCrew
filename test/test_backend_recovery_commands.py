@@ -61,7 +61,7 @@ def test_the_kiro_prerequisite_constant_is_derived() -> None:
     [
         (ACP_BACKEND_KIRO, "kiro-cli login"),
         (ACP_BACKEND_KAS, "kiro-cli login"),
-        (ACP_BACKEND_CLAUDE, "claude /login"),
+        (ACP_BACKEND_CLAUDE, "claude auth login"),
         (ACP_BACKEND_CODEX, "codex login"),
     ],
 )
@@ -80,10 +80,23 @@ def test_codex_message_offers_the_read_only_check() -> None:
     assert "codex login status" in message
 
 
-def test_claude_message_omits_a_check_it_does_not_have() -> None:
-    """No status subcommand exists, so none is invented."""
+def test_claude_message_offers_the_read_only_check() -> None:
+    """``claude auth status`` reports sign-in state and mutates nothing."""
     message = not_logged_in_message(ACP_BACKEND_CLAUDE)
-    assert "Check with" not in message
+    assert "claude auth status" in message
+
+
+def test_no_message_advertises_a_tui_slash_command() -> None:
+    """The defect this pins: a slash command is typed INSIDE a harness's TUI.
+
+    From a shell it is an ordinary argument, so ``claude /login`` starts a
+    session with "/login" as the prompt and signs nothing in. The user sees no
+    error, gets no credential, and the next turn reports the same stale session
+    -- a failure that reads as Kiro Crew ignoring a completed login.
+    """
+    for backend in ACP_BACKENDS_KNOWN:
+        assert " /" not in login_command_for(backend), backend
+        assert " /" not in auth_status_command_for(backend), backend
 
 
 def test_an_unknown_backend_gets_generic_guidance() -> None:

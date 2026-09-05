@@ -56,7 +56,7 @@ backend in for you, and never asks you to paste a credential into chat.
 | Backend | Sign in | Verify |
 |---------|---------|--------|
 | kiro-cli, KAS | `kiro-cli login` | `kiro-cli whoami` |
-| Claude Code | `claude /login` | — |
+| Claude Code | `claude auth login` | `claude auth status` |
 | Codex | `codex login` | `codex login status` |
 
 On a host with no browser, Codex also accepts `codex login --device-auth`, and
