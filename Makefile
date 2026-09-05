@@ -16,6 +16,16 @@
 #   make use backend=claude    — switch harness without starting anything
 #   make stop      — stop a running gateway
 #   make restart   — same as start (stop is already unconditional)
+# POSIX only. Windows `make` runs each recipe through cmd.exe, which knows
+# neither `export` nor `$(VENV)/bin/...`, so a run from PowerShell fails one
+# line at a time with "'NBD' is not recognized" and similar -- a cascade that
+# says nothing about the actual cause. Fail once, at the top, with the command
+# that works. $(OS) is set to Windows_NT by the Windows build of make and is
+# unset under WSL, MSYS and every real POSIX host.
+ifeq ($(OS),Windows_NT)
+$(error This Makefile is POSIX-only. Run it inside WSL, e.g.: wsl -d Ubuntu -- bash -lc "cd ~/KiroCrew && make $(MAKECMDGOALS)")
+endif
+
 .PHONY: all build frontend backend test clean wheel backend-bin desktop \n        start stop restart status token logs setup adapters signin doctor-harness use
 
 PY ?= python3
