@@ -368,6 +368,9 @@ def _os_fix_hint(mac: str, linux: str, windows: str | None = None) -> str:
 # backend, and the verdict comes from ``agent_sdk.probe_backend`` so doctor and the
 # dashboard cannot give different answers.
 _CLAUDE_ACP_BIN = "claude-agent-acp"
+# The codex-acp adapter. ONE binary, not two: it ships its own compatible
+# Codex, so there is no second executable Crew resolves for it.
+_CODEX_ACP_BIN = "codex-acp"
 
 # Managed servers doctor must NEVER add to ``allowedTools``.
 #
@@ -1058,6 +1061,58 @@ def _doctor_claude_backend() -> None:
         # probe's three-valued verdict exists to prevent, and which the dashboard
         # also refuses to make.
         print("  claude-acp:  ⚠️  could not check")
+
+
+def _doctor_codex_backend() -> None:
+    """Report Codex as an optional agent backend, and how to check its sign-in.
+
+    Its own function for the same reason as :func:`_doctor_claude_backend`, and
+    a parallel block rather than a shared one: the harnesses differ in what they
+    can honestly report, and collapsing them would force the more capable answer
+    onto the less capable one.
+
+    Two things separate this from the Claude report:
+
+    * ONE component, because codex-acp ships its own Codex binary. There is no
+      half-install to distinguish, so ``installed`` really is the whole install
+      fact.
+    * Installed is NOT signed in, and here that gap is closable: Codex has a
+      read-only ``login status`` subcommand. Doctor PRINTS the command rather
+      than running it, deliberately. Doctor is expected to be read by an
+      assisting agent as well as a person, and a printed command lets either run
+      the check against their own environment; running it here would spawn a
+      third-party binary from a diagnostic, and its verdict would then have to be
+      cached, aged and explained like every other measurement.
+    """
+    try:
+        from kiro_crew.acp_backends import ACP_BACKEND_CODEX, auth_status_command_for
+        from kiro_crew.agent_sdk import INSTALLED, MISSING, probe_backend
+
+        codex_state = probe_backend(ACP_BACKEND_CODEX)
+    except Exception:
+        codex_state = None
+    if codex_state is None:
+        print("  codex-acp:   ⚠️  could not check")
+        return
+    if codex_state.installed == INSTALLED:
+        where = shutil.which(_CODEX_ACP_BIN)
+        located = f" {where}" if where else " resolved off PATH"
+        print(f"  codex-acp:   ✅{located} (Codex adapter installed)")
+        check = auth_status_command_for(ACP_BACKEND_CODEX)
+        if check:
+            # Installed says nothing about credentials, and a Codex session dies
+            # on its first turn without them. Naming the check is the whole
+            # remedy an operator needs and costs no measurement.
+            print(f"               sign-in is not checked here; run `{check}`")
+    elif codex_state.installed == MISSING:
+        missing = ", ".join(codex_state.missing_components) or "components"
+        print(f"  codex-acp:   ⏭  {missing} not found (optional agent backend)")
+        if codex_state.install_command:
+            print(f"               {codex_state.install_command}")
+    else:
+        # UNKNOWN, never reported as MISSING -- same reasoning as the Claude
+        # report: it would send someone to install what they may already have.
+        print("  codex-acp:   ⚠️  could not check")
 
 
 def _doctor_path_launcher() -> None:
@@ -2759,6 +2814,7 @@ def _doctor(platform_boot_error: "Exception | None" = None, bundle: bool = False
         print("               Install kiro-cli per its docs, then: kiro-cli login")
 
     _doctor_claude_backend()
+    _doctor_codex_backend()
 
     git = shutil.which("git")
     if git:
