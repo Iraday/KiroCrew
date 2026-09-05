@@ -40,6 +40,7 @@ from kiro_crew.acp.liveness import (
 )
 from kiro_crew.acp.types import (
     ACP_BACKEND_CLAUDE,
+    ACP_BACKEND_KIRO,
     JSONRPC_METHOD_NOT_FOUND,
     AcpPromptStats,
 )
@@ -8510,7 +8511,7 @@ class TestFormatAcpError:
             "message": "Kiro failed to generate a response",
             "data": "ValidationException: input contains an unsupported field 'foo'",
         }
-        out = _format_acp_error(err)
+        out = _format_acp_error(err, None, ACP_BACKEND_KIRO)
         assert "transient error" not in out.lower()
         assert "ValidationException: input contains an unsupported field 'foo'" in out
 
@@ -8522,7 +8523,7 @@ class TestFormatAcpError:
             "message": "Internal error",
             "data": "DispatchFailure: session expired",
         }
-        out = _format_acp_error(err)
+        out = _format_acp_error(err, None, ACP_BACKEND_KIRO)
         assert "session has expired" in out.lower() or "session expired" in out.lower()
         assert "kiro-cli login" in out.lower()
         assert "retry" in out.lower() and "will not help" in out.lower()
@@ -8536,7 +8537,7 @@ class TestFormatAcpError:
         drive the classification."""
         for status in ("HTTP 401", "HTTP 403", "status code 401", "status 403"):
             err = {"code": -32603, "message": "Internal error", "data": status}
-            out = _format_acp_error(err)
+            out = _format_acp_error(err, None, ACP_BACKEND_KIRO)
             assert "kiro-cli login" in out.lower(), f"No sign-in guidance for: {status!r}"
             assert "transient error" not in out.lower(), f"Misclassified: {status!r}"
 
@@ -8549,7 +8550,7 @@ class TestFormatAcpError:
             "message": "Encountered an error in the response stream",
             "data": "DispatchFailure ConnectionResetError: HTTP 401",
         }
-        out = _format_acp_error(err)
+        out = _format_acp_error(err, None, ACP_BACKEND_KIRO)
         assert "kiro-cli login" in out.lower()
         assert "transient error" not in out.lower()
         assert "retry in a moment" not in out.lower()
@@ -8563,7 +8564,7 @@ class TestFormatAcpError:
             "message": "Internal error",
             "data": "The bearer token included in the request is invalid.",
         }
-        out = _format_acp_error(err)
+        out = _format_acp_error(err, None, ACP_BACKEND_KIRO)
         assert "kiro-cli login" in out.lower()
         assert "retry" in out.lower() and "will not help" in out.lower()
         # Must NOT show the misleading transient-5xx advice.
@@ -8578,7 +8579,7 @@ class TestFormatAcpError:
             "message": "Encountered an error in the response stream",
             "data": "DispatchFailure ConnectionResetError: the bearer token is invalid",
         }
-        out = _format_acp_error(err)
+        out = _format_acp_error(err, None, ACP_BACKEND_KIRO)
         assert "kiro-cli login" in out.lower()
         assert "transient error" not in out.lower()
 
@@ -8593,7 +8594,7 @@ class TestFormatAcpError:
                 "Field 'temperature' is invalid"
             ),
         }
-        out = _format_acp_error(err)
+        out = _format_acp_error(err, None, ACP_BACKEND_KIRO)
         assert "kiro-cli login" not in out.lower()
 
     def test_genuine_5xx_still_transient_with_auth_absent(self):
@@ -8603,7 +8604,7 @@ class TestFormatAcpError:
             "message": "Internal error",
             "data": "ServiceUnavailableException: HTTP 503",
         }
-        out = _format_acp_error(err)
+        out = _format_acp_error(err, None, ACP_BACKEND_KIRO)
         assert "transient" in out.lower()
         assert "kiro-cli login" not in out.lower()
 
@@ -8620,7 +8621,7 @@ class TestFormatAcpError:
         ]
         for text in variants:
             err = {"code": -32603, "message": "Internal error", "data": text}
-            out = _format_acp_error(err)
+            out = _format_acp_error(err, None, ACP_BACKEND_KIRO)
             assert "transient error" not in out.lower(), f"Failed for: {text!r}"
             assert "kiro-cli login" in out.lower(), f"No login guidance for: {text!r}"
 
@@ -8632,7 +8633,7 @@ class TestFormatAcpError:
             "message": "Internal error",
             "data": "DispatchFailure ConnectionResetError: session expired",
         }
-        out = _format_acp_error(err)
+        out = _format_acp_error(err, None, ACP_BACKEND_KIRO)
         assert "transient error" not in out.lower()
         assert "kiro-cli login" in out.lower()
 

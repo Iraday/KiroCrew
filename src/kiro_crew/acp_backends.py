@@ -41,9 +41,9 @@ logger = logging.getLogger(__name__)
 ACP_BACKEND_CLAUDE = "claude"
 ACP_BACKEND_KAS = "kas"
 # The Codex ACP adapter: a Node stdio server that boots the Codex app server and
-# translates ACP onto its operations. Known so that an edition shipping a provider
-# for it can register the id; absent from BASELINE_SELECTABLE_BACKENDS below, so no
-# build offers it until something registers it.
+# translates ACP onto its operations. In BASELINE_SELECTABLE_BACKENDS below, so any
+# operator holding the adapter can select it; that constant carries what had to be
+# true first.
 ACP_BACKEND_CODEX = "codex"
 # The kiro-cli backend is spelled as the empty string throughout, so name it
 # rather than leaving every call site to infer it from "not claude".
@@ -124,6 +124,10 @@ BASELINE_SELECTABLE_BACKENDS: FrozenSet[str] = frozenset(
 # entry is indistinguishable from a typo'd blank that a JSON linter would keep.
 # ``"kiro"`` is therefore the WIRE name, translated here rather than at each
 # reader, so the policy vocabulary has one owner.
+#
+# Every id in ``ACP_BACKENDS_KNOWN`` is mapped, selectable or not: a policy author
+# has to be able to deny an id BEFORE a build offers it, and the mapping is what
+# makes the id nameable in a rule at all.
 
 POLICY_ID_KIRO = "kiro"
 
@@ -131,9 +135,6 @@ POLICY_ID_BY_BACKEND: dict = {
     ACP_BACKEND_KIRO: POLICY_ID_KIRO,
     ACP_BACKEND_KAS: ACP_BACKEND_KAS,
     ACP_BACKEND_CLAUDE: ACP_BACKEND_CLAUDE,
-    # Present even though no build ships codex as selectable: a policy author has to
-    # be able to deny an id BEFORE an edition registers it, and the mapping is what
-    # makes the id nameable in a rule at all.
     ACP_BACKEND_CODEX: ACP_BACKEND_CODEX,
 }
 
@@ -152,6 +153,57 @@ POLICY_ID_BY_BACKEND: dict = {
 #: absent. The floor has to be the member with the fewest preconditions of its own.
 #: Revisit if KAS ever ships a binary of its own.
 GOVERNANCE_FLOOR_BACKEND: str = ACP_BACKEND_KIRO
+
+# ── Recovery commands, per harness ──
+#
+# A signed-out session is the one failure every harness has, and the command that
+# fixes it is the ONE thing the user needs. Keyed by backend because a shared
+# string is worse than no string: telling a Codex user to run ``kiro-cli login``
+# names a binary they may not have installed, and they cannot tell that the
+# advice is wrong rather than the install being broken.
+#
+# CODE CONSTANTS, never catalog values. A literal the user must type or execute
+# cannot be translated -- see website/docs/i18n-catalog.md. They live in this
+# leaf so the ACP error path, the dashboard payload and ``doctor`` all read one
+# copy; ``kiro_prerequisite.KIRO_CLI_LOGIN_COMMAND`` derives from here rather
+# than holding a second.
+
+#: What the user runs to sign a harness in.
+BACKEND_LOGIN_COMMAND: dict = {
+    ACP_BACKEND_KIRO: "kiro-cli login",
+    # KAS is served by kiro-cli's own ACP relay, so it is the same sign-in.
+    ACP_BACKEND_KAS: "kiro-cli login",
+    ACP_BACKEND_CLAUDE: "claude /login",
+    ACP_BACKEND_CODEX: "codex login",
+}
+
+#: A READ-ONLY command that reports whether a harness is signed in, for a user
+#: or an assisting agent to run. Absent for a harness with no such command --
+#: an entry here is a claim that the command exists and is non-mutating, so a
+#: guess would send someone to a command that does not exist or, worse, starts
+#: an interactive login. Claude has no equivalent read-only status subcommand,
+#: so it has no entry rather than an approximate one.
+BACKEND_AUTH_STATUS_COMMAND: dict = {
+    ACP_BACKEND_KIRO: "kiro-cli whoami",
+    ACP_BACKEND_KAS: "kiro-cli whoami",
+    ACP_BACKEND_CODEX: "codex login status",
+}
+
+
+def login_command_for(backend: str) -> str:
+    """The sign-in command for *backend*, or ``""`` when none is known.
+
+    Falls back to nothing rather than to kiro's command: a wrong command reads
+    as authoritative and costs more than an absent one, which at least leaves
+    the reader looking at the harness's own documentation.
+    """
+    return BACKEND_LOGIN_COMMAND.get(backend, "")
+
+
+def auth_status_command_for(backend: str) -> str:
+    """The read-only sign-in check for *backend*, or ``""`` when none exists."""
+    return BACKEND_AUTH_STATUS_COMMAND.get(backend, "")
+
 
 # ── Two sets, because policy must be RE-APPLIED, not applied once ──
 #

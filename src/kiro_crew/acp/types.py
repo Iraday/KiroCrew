@@ -33,6 +33,8 @@ from kiro_crew.acp_backends import (  # noqa: F401 - re-exported for existing im
     ACP_BACKENDS_SESSION_MCP_ARRAY,
     ACP_BACKENDS_SESSION_SHARING,
     ACP_BACKENDS_STEER,
+    auth_status_command_for,
+    login_command_for,
     model_registry_namespace,
     selectable_backends,
 )

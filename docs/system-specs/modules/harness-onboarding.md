@@ -124,6 +124,38 @@ operator does. A build that offers a switch with no probe behind it cannot tell
 anyone what was missing when the session failed to start — the switch renders,
 the session dies, and the dashboard has nothing to say.
 
+### Stage 5b — installed is not signed in
+
+The probe answers *installed*. Every harness also has an *authenticated* state
+it will not start without, and that is the failure an operator actually hits on
+a working install: the binary resolves, the session dies on its first turn.
+
+Two entries in `acp_backends` cover it, and they are **static commands, not
+measurements**:
+
+- `BACKEND_LOGIN_COMMAND[<id>]` — required. Every id in `ACP_BACKENDS_KNOWN` has
+  one (`test_every_known_backend_has_a_login_command`).
+- `BACKEND_AUTH_STATUS_COMMAND[<id>]` — optional, and only when a **read-only**
+  status subcommand genuinely exists. An entry claims the command exists and
+  does not mutate; a guess sends someone to a command that is absent or, worse,
+  starts an interactive login. Claude has no such subcommand and therefore no
+  entry.
+
+Everything downstream derives from those two: `not_logged_in_message(backend)`
+and `_format_acp_error`'s expiry branch, `GET /api/acp-backends`
+(`login_command` / `auth_status_command`), `kirocrew doctor`, and
+`kiro_prerequisite.KIRO_CLI_LOGIN_COMMAND`. A harness that skips this stage
+inherits nothing — the lookups return `""` and the message degrades to generic
+guidance, deliberately, because a fixed fallback would name the wrong binary and
+read as authoritative while doing it.
+
+**Do not turn this into a probe.** Reading a harness's credential files makes
+readiness a measurement, and a measurement gates the control: a wrong negative
+disables the switch for an operator who is authenticated by a path the check
+cannot see — an ambient key, a relocated home, an adapter carrying its own
+configuration. Print the command and let the operator or their agent run it.
+`doctor` and the dashboard both do exactly that.
+
 ## Stage 6 — selectability, or a named exception
 
 With Stages 1–5 done, add the id to `BASELINE_SELECTABLE_BACKENDS`.
@@ -189,7 +221,7 @@ yet — say so in the PR instead of widening a seam.
 
 ## Worked example: the Codex seam
 
-The Codex onboarding is a clean instance of stopping at Stage 6:
+The Codex onboarding is a clean instance of stopping at Stage 7:
 
 | Stage | State |
 |---|---|
@@ -203,7 +235,7 @@ The Codex onboarding is a clean instance of stopping at Stage 6:
 | residual | ACP v1 cannot require a prompt for a passive READ, so the sensitive-path block does not see this harness's reads. Mitigated at the OS boundary instead: its child cannot read the credential homes the standard tier leaves open. |
 | 7 live spill | Not reached. |
 
-The lesson worth carrying: the seam is dormant for exactly one reason, that
-reason is written down where the narrowing check reads it, and closing it is a
-single stage rather than a re-litigation. That is the shape to aim for — not
-"complete or nothing", but "incomplete at a named stage".
+The lesson worth carrying: a dormant seam should be dormant for exactly one
+reason, that reason belongs where the narrowing check reads it, and closing it
+is then a single stage rather than a re-litigation. That is the shape to aim
+for — not "complete or nothing", but "incomplete at a named stage".

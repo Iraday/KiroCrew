@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Any
 
 from kiro_crew.acp.client import (
-    _NOT_LOGGED_IN_MESSAGE,
+    not_logged_in_message,
     DEFAULT_MODEL,
     AcpAuthRequired,
     AcpClient,
@@ -820,7 +820,7 @@ class AcpProvider(LLMProvider):
             # surface an actionable login prompt (parity with AcpClient) rather
             # than a generic runtime-death error.
             if runtime.saw_not_logged_in():
-                raise AcpAuthRequired(_NOT_LOGGED_IN_MESSAGE) from exc
+                raise AcpAuthRequired(not_logged_in_message(self._client.backend)) from exc
             raise
         finally:
             # subprocess launch + ACP `initialize` handshake
@@ -916,7 +916,9 @@ class AcpProvider(LLMProvider):
                         await runtime.spawn()
                     except AcpRuntimeError as exc:
                         if runtime.saw_not_logged_in():
-                            raise AcpAuthRequired(_NOT_LOGGED_IN_MESSAGE) from exc
+                            raise AcpAuthRequired(
+                                not_logged_in_message(self._client.backend)
+                            ) from exc
                         raise
                 try:
                     handle = await runtime.create_session(
@@ -926,7 +928,7 @@ class AcpProvider(LLMProvider):
                     )
                 except AcpRuntimeError as exc:
                     if runtime.saw_not_logged_in():
-                        raise AcpAuthRequired(_NOT_LOGGED_IN_MESSAGE) from exc
+                        raise AcpAuthRequired(not_logged_in_message(self._client.backend)) from exc
                     raise
                 finally:
                     # In a finally, mirroring session_load: a start that BLEW its

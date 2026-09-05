@@ -22,7 +22,7 @@ from pathlib import Path
 from typing import Any
 
 from kiro_crew.acp.client import (
-    _NOT_LOGGED_IN_MESSAGE,
+    not_logged_in_message,
     DEFAULT_MODEL,
     AcpAuthRequired,
     AcpError,
@@ -262,7 +262,7 @@ class AcpSessionProvider(LLMProvider):
             # NOT an AcpError) escapes both the AcpProcessDied and AcpError
             # handlers and surfaces as an unhandled crash.
             if self._runtime.saw_not_logged_in():
-                raise AcpAuthRequired(_NOT_LOGGED_IN_MESSAGE) from exc
+                raise AcpAuthRequired(not_logged_in_message(self._runtime.acp_backend)) from exc
             raise AcpProcessDied(str(exc)) from exc
         except AcpRuntimeError as exc:
             # Base AcpRuntimeError (e.g. prompt()'s "turn already active"
@@ -314,7 +314,7 @@ class AcpSessionProvider(LLMProvider):
         AcpError (e.g. chat_runner) and lands on its generic `except Exception`
         (raw error card, no retry/reset). Mirrors stream()'s translation."""
         if self._runtime.saw_not_logged_in():
-            return AcpAuthRequired(_NOT_LOGGED_IN_MESSAGE)
+            return AcpAuthRequired(not_logged_in_message(self._runtime.acp_backend))
         return AcpProcessDied(str(exc))
 
     async def _guarded(self, awaitable: Any) -> Any:

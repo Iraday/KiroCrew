@@ -74,6 +74,7 @@ from kiro_crew.acp.session_mcp import session_mcp_deny_rules
 from kiro_crew.acp.types import (
     ACP_BACKEND_CLAUDE,
     ACP_BACKEND_CODEX,
+    ACP_BACKEND_KAS,
     ACP_BACKEND_KIRO,
     ACP_BACKENDS_ADVERTISED_MODEL_SELECTION,
     ACP_BACKENDS_INTERNAL_SANDBOX,
@@ -133,6 +134,8 @@ from kiro_crew.acp.types import (
     AcpPromptStats,
     JsonRpcMessage,
     JsonRpcRequest,
+    auth_status_command_for,
+    login_command_for,
     model_registry_namespace,
 )
 from kiro_crew.agent import ensure_agent_materialized
@@ -1405,11 +1408,16 @@ class AcpProcessDied(AcpError):  # noqa: N818
 
 
 class AcpAuthRequired(AcpError):  # noqa: N818
-    """kiro-cli is not authenticated — the user must run ``kiro-cli login``.
+    """The selected harness is not authenticated — the user must sign it in.
 
     Non-retryable: respawning the process hits the same wall, so callers must
     surface the actionable message and skip the retry ladder rather than
     reset-and-requeue the turn.
+
+    Raise it with :func:`not_logged_in_message`, which names the harness that
+    actually failed and its own sign-in command. Every harness has this failure
+    and each fixes it differently, so a message built from a fixed string sends
+    most of them at a binary they may not have.
     """
 
 
@@ -1478,9 +1486,38 @@ class AcpPromptBusy(AcpError):  # noqa: N818
 # `_RE_SESSION_EXPIRED` already carries that wording alongside the rest of the
 # auth vocabulary, and a second narrower copy is what let the spawn path miss
 # every expiry that does not use the banner's exact words.
-_NOT_LOGGED_IN_MESSAGE = (
-    "kiro-cli is not logged in. Run `kiro-cli login` in your terminal, " "then start a new chat."
-)
+#: Harness names as they appear in a sign-in message. The backend ids are wire
+#: values (kiro is the empty string), which no user can be shown.
+_BACKEND_DISPLAY_NAME: dict = {
+    ACP_BACKEND_KIRO: "kiro-cli",
+    ACP_BACKEND_KAS: "kiro-cli",
+    ACP_BACKEND_CLAUDE: "Claude Code",
+    ACP_BACKEND_CODEX: "Codex",
+}
+
+
+def not_logged_in_message(backend: str) -> str:
+    """The sign-in prompt for the harness that actually died, not for kiro-cli.
+
+    Every caller has the backend to hand, and passing it is what keeps this
+    honest: a Codex session that surfaced ``kiro-cli login`` named a binary the
+    user may never have installed, and nothing in the message let them tell a
+    wrong instruction apart from a broken install.
+
+    A harness with no known command (:func:`login_command_for` returns ``""``)
+    gets the generic half of the sentence rather than kiro's command, for the
+    reason stated there.
+    """
+    name = _BACKEND_DISPLAY_NAME.get(backend, "The agent backend")
+    command = login_command_for(backend)
+    check = auth_status_command_for(backend)
+    if not command:
+        return f"{name} is not logged in. Sign in with its own CLI, then start a new chat."
+    verify = f" Check with `{check}`." if check else ""
+    return (
+        f"{name} is not logged in. Run `{command}` in your terminal, then start "
+        f"a new chat.{verify}"
+    )
 
 
 # ── Transient-error classification (shared by _format_acp_error and
@@ -1920,7 +1957,11 @@ def resolve_usable_model(preferred: str, advertised: Sequence[str] | None) -> st
     return ""
 
 
-def _format_acp_error(error: object, available_models: Sequence[str] | None = None) -> str:
+def _format_acp_error(
+    error: object,
+    available_models: Sequence[str] | None = None,
+    backend: str | None = None,
+) -> str:
     """Format a JSON-RPC error from the ACP backend into actionable user text.
 
     The ACP backend (kiro-cli or claude-agent-acp) surfaces upstream Bedrock
@@ -2034,9 +2075,14 @@ def _format_acp_error(error: object, available_models: Sequence[str] | None = No
             # Session expiry (401/403, or prose saying as much) — distinct from
             # the Bedrock credential errors above. Retrying or switching models
             # cannot succeed, so the message must not suggest either.
+            _cmd = login_command_for(backend) if backend is not None else ""
+            _how = (
+                f"Run `{_cmd}` in your terminal to sign back in"
+                if _cmd
+                else "Sign back in with the backend's own CLI"
+            )
             formatted = (
-                "Your session has expired. Run `kiro-cli login` in your "
-                "terminal to sign back in, then start a new chat. "
+                f"Your session has expired. {_how}, then start a new chat. "
                 "Retrying or switching models will not help — this is a "
                 "sign-in issue, not a backend error."
                 f"{req_id_suffix}"
@@ -2189,7 +2235,11 @@ def _rejected_model_from_error(error: object) -> str | None:
     return m.group(1) if m else None
 
 
-def _raise_acp_error(error: object, available_models: Sequence[str] | None = None) -> None:
+def _raise_acp_error(
+    error: object,
+    available_models: Sequence[str] | None = None,
+    backend: str | None = None,
+) -> None:
     """Format and raise the appropriate AcpError subclass for *error*.
 
     Delegates formatting to ``_format_acp_error`` and raises either
@@ -2200,7 +2250,7 @@ def _raise_acp_error(error: object, available_models: Sequence[str] | None = Non
     classifier so a model-rejection's wording and its retry verdict are decided
     from the same evidence.
     """
-    formatted = _format_acp_error(error, available_models)
+    formatted = _format_acp_error(error, available_models, backend)
     # Detect prompt-busy from the raw error (before formatting rewrites it)
     raw_data = ""
     if isinstance(error, dict):
@@ -3174,13 +3224,13 @@ class AcpClient:
     def _codex_session_mcp_servers(self) -> list:
         """MCP server array passed to a codex ``session/new`` / ``session/load``.
 
-        The codex twin of :meth:`_claude_session_mcp_servers`, still ``[]``: codex is
-        in ``ACP_BACKENDS_KNOWN`` but not in ``BASELINE_SELECTABLE_BACKENDS``, so no
-        public build offers it and there is no session to give tools to yet. The
-        registry in :mod:`kiro_crew.providers.mirrors` records that as codex's
-        declared state rather than leaving the omission unexplained; when an edition
-        registers a codex provider, the mirror it needs goes in that folder beside
-        claude's and this hook returns it.
+        The codex twin of :meth:`_claude_session_mcp_servers`, and ``[]``: the harness
+        is selectable, but nothing projects Crew's agent spec into it, so there is no
+        array to build. A codex session therefore runs with no Crew tools rather than
+        with a partial set nobody chose. The registry in
+        :mod:`kiro_crew.providers.mirrors` records that as codex's declared state
+        rather than leaving the omission unexplained; the mirror it needs goes in that
+        folder beside claude's, and this hook returns it.
 
         An edition overriding this must drop any entry whose transport the adapter
         does not advertise. codex-acp answers ``session/new`` with ``-32602`` for
@@ -6012,7 +6062,7 @@ class AcpClient:
                     self._turn_done.set()
                     return
                 if action == "error":
-                    _raise_acp_error(msg.error, self._advertised_model_ids())
+                    _raise_acp_error(msg.error, self._advertised_model_ids(), self.backend)
                 if action == "permission":
                     await self._handle_permission(msg)
                 elif action == "server_request_unknown":
@@ -6147,7 +6197,7 @@ class AcpClient:
                 )
                 return
             if action == "error":
-                _raise_acp_error(msg.error, self._advertised_model_ids())
+                _raise_acp_error(msg.error, self._advertised_model_ids(), self.backend)
             if action == "permission":
                 yield self._build_permission_event(msg)
             elif action == "server_request_unknown":
@@ -6705,7 +6755,7 @@ class AcpClient:
                 self._turn_done.set()
                 return "".join(output)
             if action == "error":
-                _raise_acp_error(msg.error, self._advertised_model_ids())
+                _raise_acp_error(msg.error, self._advertised_model_ids(), self.backend)
             if action == "permission":
                 await self._handle_permission(msg)
             elif action == "server_request_unknown":

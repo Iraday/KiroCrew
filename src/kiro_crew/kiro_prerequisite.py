@@ -53,6 +53,7 @@ from typing import Any
 
 from kiro_crew import hooks, identity_stores, platform_compat
 from kiro_crew._sqlite_compat import sqlite3
+from kiro_crew.acp_backends import ACP_BACKEND_KIRO, BACKEND_LOGIN_COMMAND
 from kiro_crew.agent_files import AGENT_FILENAME
 from kiro_crew.atomic_write import atomic_write
 from kiro_crew.config.loader import CRED_KIRO_API_KEY, read_env_file_credential
@@ -77,7 +78,12 @@ OFFICIAL_INSTALL_DOCS_URL = "https://kiro.dev/cli/"
 # website/docs/i18n-catalog.md — "A literal token the user must type must never be
 # a catalog value"). Served in the status payload so the UI has one source of
 # truth for it rather than hardcoding a second copy that can drift.
-KIRO_CLI_LOGIN_COMMAND = "kiro-cli login"
+#
+# DERIVED from the per-harness table rather than restated: every harness has a
+# sign-in command, the ACP error path and the dashboard payload read them from
+# there, and a second literal here is how kiro's copy drifts from the one those
+# surfaces show.
+KIRO_CLI_LOGIN_COMMAND = BACKEND_LOGIN_COMMAND[ACP_BACKEND_KIRO]
 # The organization-SSO counterpart, served alongside the bare command so the gate
 # can offer both instead of one ambiguous line. Both flags are load-bearing:
 # ``--use-device-flow`` is what makes the others take effect at all (kiro-cli

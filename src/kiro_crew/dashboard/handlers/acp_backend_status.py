@@ -91,6 +91,7 @@ def _snapshot() -> List[Dict[str, Any]]:
     module-scope import from a module the package ``__init__`` also imports is
     how a cycle gets introduced later.
     """
+    from kiro_crew.acp_backends import auth_status_command_for, login_command_for
     from kiro_crew.agent_sdk import INSTALLED, MISSING, probe_backends
     from kiro_crew.dashboard.handlers.core import _selectable_acp_backends
 
@@ -117,6 +118,22 @@ def _snapshot() -> List[Dict[str, Any]]:
                 "restart_required": (
                     bool(state.restart_required) if state.installed == INSTALLED else False
                 ),
+                # Recovery vocabulary, NOT a measurement. Installed is not the
+                # same as signed in, and a row that reports only the former
+                # leaves the reader of a failed session with nothing to run.
+                # These are static per-harness commands, so they are served
+                # unconditionally -- including on an INSTALLED row, which is
+                # exactly where a sign-in failure shows up.
+                #
+                # Deliberately still NOT an auth PROBE: reading a harness's
+                # credential files would make readiness a measurement, and a
+                # measurement here gates the control (a wrong negative disables
+                # the chip for someone already signed in through an ambient key,
+                # a relocated home, or their own adapter). Commands the user or
+                # an agent can run carry no such risk, and "" where a harness has
+                # no such command is an honest absence rather than a guess.
+                "login_command": login_command_for(state.backend),
+                "auth_status_command": auth_status_command_for(state.backend),
             }
         )
     return rows
