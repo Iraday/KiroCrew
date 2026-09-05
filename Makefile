@@ -5,7 +5,12 @@
 #   make wheel     — self-contained pip wheel (dashboard bundled)
 #   make backend-bin — standalone backend tree (bundled interpreter, no system Python)
 #   make desktop   — double-clickable desktop app (universal DMG on macOS / AppImage on Linux)
-.PHONY: all build frontend backend test clean wheel backend-bin desktop
+#
+# Running it locally:
+#   make start     — stop any running gateway, then run one in this terminal
+#   make stop      — stop a running gateway
+#   make restart   — same as start (stop is already unconditional)
+.PHONY: all build frontend backend test clean wheel backend-bin desktop \n        start stop restart status token logs
 
 PY ?= python3
 VENV := .venv
@@ -115,6 +120,47 @@ desktop:
 	NBD="$$(cat "$${KIROCREW_HOME:-$$HOME/.kiro/crew}/node-bin-dir" 2>/dev/null || true)"; \
 	  { [ -z "$$NBD" ] || export PATH="$$NBD:$$PATH"; }; \
 	  bash packaging/build-desktop.sh
+
+# ── Gateway lifetime ──
+#
+# `kirocrew gateway` runs in the FOREGROUND and stops on Ctrl-C, which is the
+# right shape for development: the log is in front of you and the process dies
+# with the terminal. What it does not do is notice an already-running gateway.
+# A second one loses the race for the port and dies at bind, and the message it
+# prints is about the port rather than about the gateway already up, so the
+# usual fix is to hunt a PID. `start` therefore depends on `stop` and `restart`
+# is just an alias -- there is no start path here that can hit an occupied port.
+#
+# The stop is best-effort by design. "nothing was running" is the normal case on
+# a first run, not a failure, so a non-zero exit must not abort the build.
+KIROCREW := $(VENV)/bin/kirocrew
+
+# The same node-bin-dir marker `frontend` reads, for a different reason: the ACP
+# adapters (claude-agent-acp, codex-acp) are node programs the gateway SPAWNS, so
+# node has to be on PATH for a session to start at all, not merely to build the
+# dashboard. Without it the gateway comes up, serves the UI, and every turn dies
+# at spawn -- a failure that looks like a harness problem and is not.
+NODE_ON_PATH = NBD="$$(cat "$${KIROCREW_HOME:-$$HOME/.kiro/crew}/node-bin-dir" 2>/dev/null || true)"; 	  { [ -z "$$NBD" ] || export PATH="$$NBD:$$PATH"; }
+
+stop:
+	@$(NODE_ON_PATH); $(KIROCREW) stop 2>/dev/null || echo "  → no gateway was running"
+
+start: stop
+	@$(NODE_ON_PATH); exec $(KIROCREW) gateway
+
+restart: start
+
+status:
+	@$(NODE_ON_PATH); $(KIROCREW) status
+
+# Prints a dashboard URL. The token in it is a ~5 minute bootstrap credential
+# that the page trades for a ~20h session cookie, so open it promptly; a stale
+# one is what the red "Session expired" banner is reporting.
+token:
+	@$(KIROCREW) token
+
+logs:
+	@$(KIROCREW) logs
 
 clean:
 	rm -rf build dist *.egg-info src/*.egg-info \
