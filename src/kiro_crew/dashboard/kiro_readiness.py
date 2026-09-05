@@ -260,6 +260,39 @@ async def install_depends_on_kiro_cli() -> bool:
     return any(backend in ACP_BACKENDS_KIRO_IDENTITY_STORE for backend in selected)
 
 
+async def first_run_gate_requires_kiro_cli() -> bool:
+    """Whether the FIRST-RUN setup screen must hold the dashboard shut.
+
+    Narrower than :func:`install_depends_on_kiro_cli` by exactly one field, and
+    the difference is deliberate. That function answers for the 503 gate, whose
+    hazards include a crew-member DM session, so it reads
+    ``member_acp_backend`` too. This one answers for a full-screen block on a
+    first run, where a member session is not reachable at all: the Crew Members
+    surface sits behind a feature preview, and a first run has not turned one
+    on. Letting ``member_acp_backend`` -- which defaults to ``kas``, and so is
+    ALWAYS in the kiro identity store on a fresh install -- hold the whole
+    dashboard shut would block an operator whose chat harness needs no kiro-cli
+    on account of a surface they cannot open.
+
+    The 503 gate keeps reading both fields. A member session really does spawn
+    kiro-cli once that preview is on, and nothing here relaxes that.
+
+    **Fails CLOSED**, like its sibling: an unreadable config, a load error or a
+    degraded value all answer ``True``. ``ACP_BACKEND_KIRO`` is the empty string
+    and is IN the set, so the value ``_normalize_acp_backend`` produces for
+    anything unknown lands on "gate it" with no special case.
+    """
+    try:
+        from kiro_crew.config.loader import KiroCrewConfig
+
+        cfg = await asyncio.to_thread(KiroCrewConfig.load)
+        chat_backend = cfg.agent.acp_backend
+    except Exception:
+        logger.debug("first-run gate: config unreadable, gating as kiro-dependent", exc_info=True)
+        return True
+    return chat_backend in ACP_BACKENDS_KIRO_IDENTITY_STORE
+
+
 async def reject_if_kiro_unverified(request: web.Request) -> web.Response | None:
     """Return 503 for the endpoints that must fail closed on a stale latch.
 

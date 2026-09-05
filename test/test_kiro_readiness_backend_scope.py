@@ -148,3 +148,59 @@ async def test_in_scope_install_passes_when_verified(
 
     monkeypatch.setattr(kiro_readiness, "kiro_verified_ready", _ready)
     assert await kiro_readiness.reject_if_kiro_unverified(_FakeRequest()) is None
+
+
+# ── The first-run setup gate asks a narrower question ──
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("member", [ACP_BACKEND_KAS, ACP_BACKEND_CLAUDE, ACP_BACKEND_KIRO])
+@pytest.mark.parametrize("chat", [ACP_BACKEND_KIRO, ACP_BACKEND_KAS])
+async def test_first_run_gate_holds_for_a_kiro_chat_harness(
+    load_config, chat: str, member: str
+) -> None:
+    """Whatever member DMs are set to, a kiro chat harness still needs the binary."""
+    load_config(_config(chat, member))
+    assert await kiro_readiness.first_run_gate_requires_kiro_cli() is True
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("chat", [ACP_BACKEND_CLAUDE, ACP_BACKEND_CODEX])
+async def test_first_run_gate_opens_on_the_shipped_member_default(load_config, chat: str) -> None:
+    """The case the whole predicate exists for.
+
+    ``member_acp_backend`` DEFAULTS to ``kas``, so a fresh install that switches
+    only its chat harness still reads as kiro-dependent to the 503 gate. Holding
+    the full-screen first-run block on that default would make the switch
+    unreachable: the gate wraps the dashboard, so the panel that changes the
+    member field is behind the very screen the field is keeping shut.
+    """
+    load_config(_config(chat, ACP_BACKEND_KAS))
+    assert await kiro_readiness.first_run_gate_requires_kiro_cli() is False
+
+
+@pytest.mark.asyncio
+async def test_the_two_gates_disagree_by_exactly_the_member_field(load_config) -> None:
+    """Pins the difference itself, so narrowing one never silently narrows the other."""
+    load_config(_config(ACP_BACKEND_CODEX, ACP_BACKEND_KAS))
+    assert await kiro_readiness.install_depends_on_kiro_cli() is True
+    assert await kiro_readiness.first_run_gate_requires_kiro_cli() is False
+
+
+@pytest.mark.asyncio
+async def test_first_run_gate_fails_closed_on_an_unreadable_config(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from kiro_crew.config.loader import KiroCrewConfig
+
+    def _boom(*a: object, **k: object) -> object:
+        raise OSError("config is gone")
+
+    monkeypatch.setattr(KiroCrewConfig, "load", staticmethod(_boom))
+    assert await kiro_readiness.first_run_gate_requires_kiro_cli() is True
+
+
+@pytest.mark.asyncio
+async def test_first_run_gate_fails_closed_on_a_missing_field(load_config) -> None:
+    load_config(SimpleNamespace(agent=SimpleNamespace()))
+    assert await kiro_readiness.first_run_gate_requires_kiro_cli() is True

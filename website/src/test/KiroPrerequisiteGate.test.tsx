@@ -146,6 +146,35 @@ describe('KiroPrerequisiteGate', () => {
     expect(await screen.findByText('Dashboard loaded')).toBeInTheDocument()
   })
 
+  it('opens for an install whose chat harness is not kiro-cli', async () => {
+    // The dead end this branch removes: the gate wraps the whole dashboard, so a
+    // user who does not want kiro-cli could never reach the panel that switches
+    // harness. Nothing about kiro is ready here -- not installed, not signed in,
+    // first run -- and the gate still opens, because the server says this
+    // install's chat harness never spawns the binary.
+    vi.mocked(api.kiroPrerequisite).mockResolvedValue(status({ requires_kiro_cli: false }))
+
+    renderWithProviders(
+      <KiroPrerequisiteGate><div>Dashboard loaded</div></KiroPrerequisiteGate>,
+    )
+
+    expect(await screen.findByText('Dashboard loaded')).toBeInTheDocument()
+  })
+
+  it('stays shut when the gateway does not report requires_kiro_cli', async () => {
+    // Fails CLOSED on an older gateway: `undefined` is the absence of an answer,
+    // never permission to skip setup. A falsy test here would have opened the
+    // gate on every gateway that predates the field.
+    vi.mocked(api.kiroPrerequisite).mockResolvedValue(status())
+
+    renderWithProviders(
+      <KiroPrerequisiteGate><div>Dashboard loaded</div></KiroPrerequisiteGate>,
+    )
+
+    expect(await screen.findByText(/Kiro Crew uses Kiro CLI/)).toBeInTheDocument()
+    expect(screen.queryByText('Dashboard loaded')).not.toBeInTheDocument()
+  })
+
   it('renders the application immediately when Kiro is ready', async () => {
     vi.mocked(api.kiroPrerequisite).mockResolvedValue(status({
       installed: true,

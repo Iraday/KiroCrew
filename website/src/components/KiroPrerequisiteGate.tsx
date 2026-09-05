@@ -27,6 +27,7 @@ import {
 import { safeGetItem, safeSetItem } from '../utils/safeStorage'
 import { copyToClipboard } from '../utils/clipboard'
 import { Badge, Btn, Card, SendBtn } from './ui'
+import { AgentBackendTab } from '../pages/developer/AgentBackendTab'
 
 import { i18nT } from '../i18n/t'
 const QUERY_KEY = ['kiro-prerequisite'] as const
@@ -870,6 +871,18 @@ export default function KiroPrerequisiteGate({ children }: { children: ReactNode
   if (prerequisite.ready) {
     return <>{children}</>
   }
+  // This install's chat harness is not kiro-cli, so kiro's install and sign-in
+  // are prerequisites for nothing the dashboard can currently reach, and a
+  // full-screen block would be asking for a binary no session will spawn. The
+  // SERVER decides (`first_run_gate_requires_kiro_cli`), because the selected
+  // harness lives in config the SPA does not own.
+  //
+  // `=== false` rather than a falsy test: a gateway older than this field omits
+  // the key, and `undefined` must keep the gate exactly as it was. The absence
+  // of an answer is not permission to skip setup.
+  if (prerequisite.requires_kiro_cli === false) {
+    return <>{children}</>
+  }
   const status = prerequisite
   const platform = status.platform || 'local'
   // Defensive `?? []`: a gateway older than this field, and every test fixture
@@ -1090,6 +1103,24 @@ export default function KiroPrerequisiteGate({ children }: { children: ReactNode
               </div>
             )}
           </Card>
+
+          {/* The way OUT of this screen for someone who does not want kiro-cli.
+              Without it the gate is a dead end: it wraps the whole dashboard
+              (DashboardBootstrap), so the Developer -> Agent Backend panel that
+              owns this same choice cannot be reached while the gate is up, and a
+              first run has no other surface that writes `agent.acp_backend`.
+
+              The DEVELOPER PANEL's own component, mounted verbatim rather than
+              reimplemented here. It already probes each harness, names what is
+              missing with the command that installs it, carries the per-harness
+              caveats, and is fully translated; a second picker would be a second
+              thing to keep in step with `acp_backends` and would start drifting
+              on the first harness added. Switching writes config, and the 5s
+              blocking poll above re-reads `requires_kiro_cli` and opens the gate
+              on its own -- the same path that notices a kiro-cli install. */}
+          <div className="mt-6 border-t border-border pt-5">
+            <AgentBackendTab />
+          </div>
 
           <div className="flex items-center justify-between gap-4 border-t border-border pt-5">
             <p className="text-[13px] text-muted" aria-live="polite">

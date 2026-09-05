@@ -513,7 +513,14 @@ Subprocess lifecycle:
   empty-string value `_normalize_acp_backend` produces for anything unknown all
   land back on "gate it". Note that a Claude chat backend alone is not enough to
   leave the scope, because `member_acp_backend` defaults to KAS, which is
-  kiro-cli's own relay.
+  kiro-cli's own relay. The **first-run setup gate** asks a narrower question
+  through a second predicate, `first_run_gate_requires_kiro_cli`, which reads
+  `agent.acp_backend` ONLY. That gate is a full-screen block wrapping the whole
+  dashboard, and a member DM session is not reachable from a first run at all
+  (the Crew Members surface is behind a feature preview), so letting the KAS
+  default hold it shut would strand a user whose chat harness needs no kiro-cli
+  on the one screen from which the harness cannot be changed. It fails closed
+  the same way, and the 503 gate above keeps reading both fields.
 - **`AcpAuthRequired` is the authoritative logout signal.** Readiness is probed
   at gateway start and on explicit user action only, so a mid-session sign-out is
   discovered when the ACP attempt fails, not by a poll. `AcpRuntime`/`AcpClient`

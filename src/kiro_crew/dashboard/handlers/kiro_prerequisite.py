@@ -9,6 +9,7 @@ from typing import Any
 
 from aiohttp import web
 
+from kiro_crew.dashboard.kiro_readiness import first_run_gate_requires_kiro_cli
 from kiro_crew.kiro_prerequisite import (
     KIRO_CLI_LOGIN_COMMAND,
     KIRO_CLI_SSO_LOGIN_COMMAND,
@@ -145,8 +146,16 @@ async def api_kiro_prerequisite_status(request: web.Request) -> web.Response:
         # survives this path and keeps a returning user out of first-run setup.
         logger.warning("Kiro prerequisite status probe failed", exc_info=True)
         snapshot = _not_ready_snapshot(bool(service.initial_setup_complete))
+    # Whether this install's CHAT harness needs kiro-cli at all. Served on both
+    # payload branches because the gate is a full-screen block for every caller,
+    # and a key that appears only for an owner is one a non-owner's client reads
+    # as ``undefined`` and branches on as though the absence meant something.
+    requires_kiro_cli = await first_run_gate_requires_kiro_cli()
+
     if _is_dashboard_owner(request):
-        return web.json_response({**snapshot, "setup_allowed": True})
+        return web.json_response(
+            {**snapshot, "setup_allowed": True, "requires_kiro_cli": requires_kiro_cli}
+        )
 
     # Authorized non-owner dashboard users need the readiness bit so the
     # application gate does not lock them out after the owner completes setup.
@@ -164,6 +173,7 @@ async def api_kiro_prerequisite_status(request: web.Request) -> web.Response:
             "login_command": KIRO_CLI_LOGIN_COMMAND,
             "sso_login_command": KIRO_CLI_SSO_LOGIN_COMMAND,
             "setup_allowed": False,
+            "requires_kiro_cli": requires_kiro_cli,
             # Redacted like the rest of this block: the failure kind and probe
             # detail describe the HOST's sandbox posture (kernel knobs, errnos),
             # which is exactly the candidate/host state a non-owner must not see.

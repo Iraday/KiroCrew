@@ -866,6 +866,21 @@ specified compatibility change.
   do not bypass first-run setup. App tokens remain denied. The two
   owner-only POST route (`repair-specs`) rewrites Kiro Crew's own agent specs and
   returns `200`; it is the only write on this surface.
+  **`requires_kiro_cli` is served on both payload branches** (owner and redacted
+  alike, so no caller reads it as `undefined` and branches on the absence). It
+  answers `first_run_gate_requires_kiro_cli` — whether this install's CHAT
+  harness needs the binary at all — and is FALSE for a `claude` or `codex`
+  `agent.acp_backend`, at which point the gate renders the dashboard however
+  unready kiro-cli is. Deliberately narrower than the 503 gate's
+  `install_depends_on_kiro_cli`, which also reads `member_acp_backend`: that
+  field defaults to KAS, so reading it here would hold the full-screen block on
+  every fresh install that switched only its chat harness, and the panel that
+  changes it sits behind the gate. Fails closed — an unreadable config, a
+  missing field or a degraded value all answer `true`, and a gateway that omits
+  the key leaves the frontend gated exactly as before (`=== false`, never a
+  falsy test). The gate offers the switch itself by mounting the Developer
+  panel's own `AgentBackendTab` on the setup screen, rather than reimplementing
+  a picker that would drift from `acp_backends`.
   **Probing is boot-and-explicit-action only.** The readiness probe (two
   `kiro-cli` spawns) runs ONCE per gateway, in `warm_up()` shortly after start,
   and thereafter only on an explicit user action: the gate's Refresh / Check

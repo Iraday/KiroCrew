@@ -1776,6 +1776,15 @@ export interface KiroPrerequisiteStatus {
   authenticated: boolean
   ready: boolean
   initial_setup_complete: boolean
+  /**
+   * Whether this install's CHAT harness needs kiro-cli at all.
+   *
+   * Optional because a gateway older than this field omits it, and the gate
+   * treats `undefined` as "still gated" — the absence of an answer is not a
+   * licence to skip setup. Narrower than the 503 gate's own question: it reads
+   * `agent.acp_backend` only, never `member_acp_backend`.
+   */
+  requires_kiro_cli?: boolean
   repair_required: boolean
   docs_url: string
   /**
