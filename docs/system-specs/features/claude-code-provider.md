@@ -357,6 +357,18 @@ rather than half-honoured: `tool_choice` beyond `auto`, thinking blocks, and
 server-side tools. Token counting is a character-ratio heuristic that errs high,
 so context gating trips early rather than after an overflow.
 
+### Windows: the npm shim cannot be spawned
+
+A global `npm i -g @anthropic-ai/claude-code` puts only `claude.cmd` on PATH, and
+Node has refused to spawn a `.cmd` without `shell: true` since CVE-2024-27980.
+The adapter's SDK spawns `pathToClaudeCodeExecutable` directly, so handing it
+that shim fails every `session/new` with a bare `spawn EINVAL` naming neither the
+path nor the reason — while the real `claude.exe` sits beside it, installed and
+working. `_resolve_claude_code_executable` therefore ends in
+`_prefer_native_binary`, which on Windows reads the installed package's own `bin`
+entry and swaps the shim for it. It reads the manifest rather than assuming a
+filename, and degrades to the shim whenever anything is missing.
+
 ### Standing rule
 
 Unchanged by Claude Code becoming selectable: `agent.provider` stays

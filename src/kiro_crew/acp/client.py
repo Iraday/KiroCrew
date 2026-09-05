@@ -215,6 +215,14 @@ CLAUDE_ACP_BIN = "claude-agent-acp"
 # action when the binary is on PATH; otherwise the adapter surfaces its own
 # native-binary error.
 CLAUDE_CODE_BIN = "claude"
+# npm package that provides the Claude backend CLI itself. Consulted only on
+# Windows, to reach the real executable behind npm's ``.cmd`` shim -- see
+# ``_windows_native_claude_binary``.
+CLAUDE_CODE_NPM_PKG = "@anthropic-ai/claude-code"
+# Windows shim extensions npm writes next to its global bin. Node refuses to
+# spawn either without a shell (CVE-2024-27980), so a path ending in one of
+# these cannot be handed to the adapter's SDK.
+_WINDOWS_SHIM_SUFFIXES = (".cmd", ".bat")
 # npm package that provides the claude-agent-acp binary.  Install it publicly
 # with ``npm i -g @agentclientprotocol/claude-agent-acp`` (or add it as a
 # project dependency); resolution also accepts a copy under a project-local
@@ -689,6 +697,54 @@ def _resolve_codex_acp_bin() -> tuple[list[str] | None, str]:
     return None, search_path
 
 
+def _windows_native_claude_binary(shim: str) -> str | None:
+    """The real executable behind npm's ``claude.cmd`` shim, or ``None``.
+
+    Node has refused to spawn a ``.cmd`` or ``.bat`` without ``shell: true``
+    since CVE-2024-27980, and the adapter's SDK spawns
+    ``pathToClaudeCodeExecutable`` directly. Handing it the shim therefore fails
+    every ``session/new`` with a bare ``spawn EINVAL`` that names neither the
+    path nor the reason -- while the real binary sits next to it, installed and
+    working, because a global npm install writes only the shim onto PATH.
+
+    Resolution reads the installed package's own ``bin`` entry rather than
+    assuming a filename, so a package that renames or relocates its executable
+    keeps working. Returns ``None`` whenever anything is missing or unreadable;
+    the caller then falls back to the shim, which is no worse than before.
+    """
+    shim_path = Path(shim)
+    pkg_dir = shim_path.parent / "node_modules" / CLAUDE_CODE_NPM_PKG
+    try:
+        manifest = json.loads((pkg_dir / "package.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    entry = manifest.get("bin")
+    if isinstance(entry, dict):
+        entry = entry.get(CLAUDE_CODE_BIN)
+    if not isinstance(entry, str) or not entry:
+        return None
+    candidate = pkg_dir / entry
+    try:
+        if candidate.is_file() and candidate.suffix.lower() not in _WINDOWS_SHIM_SUFFIXES:
+            return str(candidate)
+    except OSError:
+        return None
+    return None
+
+
+def _prefer_native_binary(resolved: str | None) -> str | None:
+    """Swap a Windows npm shim for the executable it wraps, where one exists.
+
+    A no-op off Windows and on a path that is already a real executable, so
+    every caller can route through it without testing the platform itself.
+    """
+    if not resolved or not platform_compat.IS_WINDOWS:
+        return resolved
+    if Path(resolved).suffix.lower() not in _WINDOWS_SHIM_SUFFIXES:
+        return resolved
+    return _windows_native_claude_binary(resolved) or resolved
+
+
 def _resolve_claude_code_executable() -> str | None:
     """Find the Claude backend CLI binary for CLAUDE_CODE_EXECUTABLE.
 
@@ -705,6 +761,9 @@ def _resolve_claude_code_executable() -> str | None:
       3. Augmented PATH (``env.augmented_path`` — includes mise/nvm/fnm/volta
          shims and the npm global bin), so a non-login launchd/systemd gateway
          still finds an installed ``claude``.
+      4. On Windows, a resolved ``.cmd``/``.bat`` shim is swapped for the real
+         executable it wraps (``_prefer_native_binary``); the SDK spawns this
+         path without a shell and Node rejects those extensions outright.
 
     Returns the resolved path, or ``None`` when no ``claude`` is found.
     """
@@ -714,12 +773,13 @@ def _resolve_claude_code_executable() -> str | None:
 
     mise_resolved = _mise_which(CLAUDE_CODE_BIN)
     if mise_resolved:
-        return mise_resolved
+        return _prefer_native_binary(mise_resolved)
 
     search_path = augmented_path(os.environ.get("PATH", ""))
     # Casing-normalize (Windows): a `which`-resolved .EXE reaches the launcher shim
     # with its true on-disk name (see _normalize_exe_casing).
-    return _normalize_exe_casing(shutil.which(CLAUDE_CODE_BIN, path=search_path))
+    resolved = _normalize_exe_casing(shutil.which(CLAUDE_CODE_BIN, path=search_path))
+    return _prefer_native_binary(resolved)
 
 
 def _claude_settings_usable(path: Path) -> bool:
