@@ -354,6 +354,20 @@ Key entry points:
 
 Full reference: [AGENTS.md](AGENTS.md)
 
+## Syncing from upstream
+
+This repository is a fork of `kirodotdev/KiroCrew` and deliberately diverges from
+it, so a sync is an integration change rather than an update. Git can merge the
+text; it cannot decide whether an upstream change should replace a fork behavior,
+sit beside it, or be rejected. **Read
+[docs/guides/upstream-sync.md](docs/guides/upstream-sync.md) before you fetch**:
+it carries the procedure and the register of what must survive the merge.
+
+Two rules are worth carrying in before you open it. Resolve a conflict by looking
+the area up in that register, not by taking whichever side changed more recently.
+And merge rather than rebase, so the merge commit records exactly which upstream
+revision was integrated; never force-push the fork's `main`.
+
 ## Documentation (required with every behavior change)
 
 **A change that alters documented behavior must update the docs in the same

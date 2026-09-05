@@ -3,10 +3,10 @@
 A *harness* is the agent process Kiro Crew drives over ACP. Kiro Crew has one
 first-class harness — `kiro-cli` (`ACP_BACKEND_KIRO`, spelled `""`) — and a
 growing set of adapted ones: Claude Code (`ACP_BACKEND_CLAUDE`), `KAS`
-(`ACP_BACKEND_KAS`), the dormant `ACP_BACKEND_CODEX` seam, and whatever a
+(`ACP_BACKEND_KAS`), Codex (`ACP_BACKEND_CODEX`), and whatever a
 bring-your-own (BYO) adapter registers next.
 
-Kiro, Claude Code and KAS are selectable on a plain public build; Claude Code in
+All four are selectable on a plain public build; Claude Code in
 particular is a shipped harness and not a dormant seam: `acp/client.py` owns the
 whole Claude spawn path and the adapter is a public npm package, so an earlier
 revision that left it out of the baseline removed only the switch, never a
@@ -25,9 +25,9 @@ halves landed — `backend_install.py` gained its probe, so the install row name
 the missing component and its command instead of reading `unknown`, and
 `acp_tool_gate` established that its tool calls reach the PreToolUse gate.
 
-Read the invariants below against that tree: three harnesses can serve a real
-session today, so a site that spells "kiro" by exclusion is already wrong on two
-of them.
+Read the invariants below against that tree: four harnesses can serve a real
+session today, so a site that spells "kiro" by exclusion is already wrong on
+three of them.
 
 *Parity* here does not mean equal treatment. It means the opposite, stated
 precisely: **an added harness may only adapt itself to the seams the Kiro

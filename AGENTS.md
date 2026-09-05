@@ -60,6 +60,7 @@ in the **same commit** when you change what it documents.
 | injected `[Cron notification]` / `[Subagent completion event]` | [injected-messages](docs/system-specs/common/injected-messages.md) |
 | build, install, dev mode | [CONTRIBUTING.md](CONTRIBUTING.md) + [install](docs/guides/install.md) |
 | Windows / cross-platform process, signal, lock, metrics | [windows-install](docs/guides/windows-install.md) + the shim table below |
+| merging upstream into this fork, or resolving a sync conflict | [upstream-sync](docs/guides/upstream-sync.md) |
 | a release, or `CHANGELOG.md` | [release](docs/build/release.md) |
 | errors, retries, user-facing failure text | [error-handling](docs/system-specs/common/error-handling.md) |
 
