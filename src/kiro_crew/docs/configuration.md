@@ -79,7 +79,7 @@ backend it started on.
 | `""` (default) | kiro-cli | `kiro-cli login` | full support |
 | `kas` | kiro-agent (KAS) | `kiro-cli login` | runs chat; some surfaces still missing |
 | `claude` | Claude Code | `claude auth login` | chat, streaming, tools, model and effort selection |
-| `codex` | Codex | `codex login` | chat and streaming; no Kiro Crew MCP tools yet |
+| `codex` | Codex | `codex login` | chat, streaming, Kiro Crew MCP tools, model and effort selection |
 
 `claude` needs two binaries (`npm i -g @agentclientprotocol/claude-agent-acp` and
 the `claude` CLI); `codex` needs one (`npm i -g @agentclientprotocol/codex-acp`,

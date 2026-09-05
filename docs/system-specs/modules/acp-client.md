@@ -194,9 +194,23 @@ flag passed to `kiro-cli acp` at spawn time drives all configuration:
     at the next turn boundary), which is why the dashboard's MCP sync skips its
     session reset on that harness — gate and semantics in
     [mcp.md](../../architecture/mcp.md#live-reconcile-when-no-restart-is-needed-at-all).
-  - **claude-agent-acp**: does NOT read any config file or `--agent` flag, so
-    `session/new` (and `session/load`) must carry the servers in the
-    `mcpServers` param. `_session_mcp_servers()` — gated on
+  - **claude-agent-acp and codex-acp**: neither reads a config file or an
+    `--agent` flag, so `session/new` (and `session/load`) must carry the servers in
+    the `mcpServers` param. Both are therefore in `ACP_BACKENDS_SESSION_MCP_ARRAY`,
+    and each has a mirror under `providers/mirrors/` that owns its translation.
+    Codex differs in three ways, all recorded in
+    `providers/mirrors/codex.py`: it needs no `permission_surface_owned`
+    precondition (it routes through session-config, which `acp_tool_gate` verifies
+    and applies before the first prompt, so `routing_verdict` answers `ROUTED`
+    where Claude is only `INDETERMINATE`); it WITHHOLDS a server whose spec
+    narrows individual tools, because there is no Crew-owned file here to re-apply
+    that restriction and forwarding it without one would widen the tool surface;
+    and it drops an entry whose transport the adapter did not advertise, because
+    codex-acp answers `-32602` for an unsupported transport and that fails the
+    whole `session/new` rather than the one server. That last filter is why the
+    codex cache is warmed AFTER `initialize` rather than on the spawn path —
+    `agentCapabilities.mcpCapabilities` does not exist until the handshake has
+    answered. `_session_mcp_servers()` — gated on
     `backend in ACP_BACKENDS_SESSION_MCP_ARRAY` (`acp_backends.py`) rather than on
     the harness's identity, so the next adapter that reads no agent spec joins the
     set instead of adding a branch — delegates to

@@ -723,9 +723,9 @@ class AgentConfig:
             "'claude' = Claude Code, 'codex' = Codex, plus whatever an edition "
             "registers. Each has its own sign-in, which Kiro Crew does not perform; "
             "a switch takes effect on new sessions only. KAS runs chat but has no "
-            "native subagent progress reporting yet, and a codex session carries no "
-            "Kiro Crew MCP tools because nothing projects the agent spec onto it "
-            "yet.",
+            "native subagent progress reporting yet. Claude and Codex both carry "
+            "Kiro Crew's MCP tools; on Claude they are withheld when the project "
+            "already has its own .claude/settings.local.json.",
             # Deliberately NO ``enum``. A literal here was frozen at import and fed
             # two import-time structures (``JSON_SCHEMA`` and ``SCHEMA_REGISTRY``),
             # both strictly earlier than an edition registering a backend at boot.

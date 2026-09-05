@@ -18,10 +18,12 @@ from kiro_crew.acp_backends import (
 )
 from kiro_crew.providers.mirrors.base import AgentConfigMirror
 from kiro_crew.providers.mirrors.claude_code import ClaudeCodeMirror
+from kiro_crew.providers.mirrors.codex import CodexMirror
 
 #: Backends whose spec projection lives in this folder.
 MIRRORS: dict[str, type[AgentConfigMirror]] = {
     ACP_BACKEND_CLAUDE: ClaudeCodeMirror,
+    ACP_BACKEND_CODEX: CodexMirror,
 }
 
 #: Backends that deliberately have no mirror, and why. Read as a claim to be
@@ -42,13 +44,6 @@ NO_MIRROR: dict[str, str] = {
         "KAS's own capability vocabulary) — it simply has not moved into this folder "
         "yet. Tracked as the next PR in the mirror stack; NOT a claim that it needs "
         "no mirror"
-    ),
-    ACP_BACKEND_CODEX: (
-        "codex is selectable, so this is a gap rather than a decision. Model, effort "
-        "and mode reach it over ACP session config, but nothing projects Crew's agent "
-        "spec, so a session carries no Crew MCP tools. The same gap claude had before "
-        "ClaudeCodeMirror; its mirror goes here and "
-        "AcpClient._codex_session_mcp_servers returns it"
     ),
 }
 

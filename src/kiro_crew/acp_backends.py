@@ -76,7 +76,7 @@ ACP_BACKENDS_KNOWN: FrozenSet[str] = frozenset(
 #: transport, not of Anthropic: any ACP adapter that does not read Crew's agent
 #: spec belongs here, and the next such harness should join the set rather than
 #: add a second branch at the call site (harness-parity H6).
-ACP_BACKENDS_SESSION_MCP_ARRAY: FrozenSet[str] = frozenset({ACP_BACKEND_CLAUDE})
+ACP_BACKENDS_SESSION_MCP_ARRAY: FrozenSet[str] = frozenset({ACP_BACKEND_CLAUDE, ACP_BACKEND_CODEX})
 
 # ── The selectable registry ──
 

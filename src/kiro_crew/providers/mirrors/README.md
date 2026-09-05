@@ -82,4 +82,4 @@ A mirror declares and routes; a helper translates.
 | `claude` | `claude_code.py` | both faces; `hooks` is its one open `no-channel` |
 | `` (kiro-cli) | `NO_MIRROR` | reads the spec itself via `--agent`; only a small `cli.json` overlay, whose home is still an open decision |
 | `kas` | `NO_MIRROR`, pending | has the most complete projection of any backend, not yet moved here |
-| `codex` | `NO_MIRROR` | known but not selectable, so no session to configure yet |
+| `codex` | `codex.py` | wire face only; withholds a server the spec narrows per-tool, and one whose transport the adapter did not advertise |

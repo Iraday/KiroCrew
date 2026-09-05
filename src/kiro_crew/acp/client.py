@@ -2790,6 +2790,12 @@ class AcpClient:
         # (harness-parity H13). None = not resolved yet; cleared on reset so the
         # next spawn re-reads the spec. See _session_mcp_servers.
         self._session_mcp_cache: list[dict[str, Any]] | None = None
+        # ``agentCapabilities.mcpCapabilities`` from initialize: which OPTIONAL MCP
+        # transports this adapter accepts. Empty until the handshake, and empty is
+        # read as "only the always-supported transports", which is the safe
+        # direction — an entry the adapter cannot take fails the whole session/new
+        # on codex, not just that server.
+        self._mcp_capabilities: dict[str, Any] = {}
         self._session_key = session_key
         # When set, this client emits a per-tool-call SEL audit from the ACP
         # dispatch loop. Used by app/worker-pool clients (e.g. code-review-sage,
@@ -3111,6 +3117,9 @@ class AcpClient:
             stub_server_names=stubbed,
             permission_surface_owned=getattr(self, "_claude_settings_authored", False),
             work_dir=self._work_dir,
+            # Only codex reads this; claude's mirror absorbs it. Empty before the
+            # handshake, which is why the codex warm runs after initialize.
+            mcp_capabilities=self._mcp_capabilities,
         )
         servers = params.get("mcpServers") or []
         out = list(servers) if isinstance(servers, list) else []
@@ -3224,20 +3233,24 @@ class AcpClient:
     def _codex_session_mcp_servers(self) -> list:
         """MCP server array passed to a codex ``session/new`` / ``session/load``.
 
-        The codex twin of :meth:`_claude_session_mcp_servers`, and ``[]``: the harness
-        is selectable, but nothing projects Crew's agent spec into it, so there is no
-        array to build. A codex session therefore runs with no Crew tools rather than
-        with a partial set nobody chose. The registry in
-        :mod:`kiro_crew.providers.mirrors` records that as codex's declared state
-        rather than leaving the omission unexplained; the mirror it needs goes in that
-        folder beside claude's, and this hook returns it.
+        The codex twin of :meth:`_claude_session_mcp_servers`, and filled by the same
+        mechanism: :mod:`kiro_crew.providers.mirrors.codex` translates the agent spec,
+        and this hook hands out the cache. Unlike claude it needs no
+        settings-ownership precondition — this backend routes tool calls through
+        session-config (``mode=read-only``, verified and applied before the first
+        prompt), so the gate is armed by a mechanism rather than by a file.
 
-        An edition overriding this must drop any entry whose transport the adapter
-        does not advertise. codex-acp answers ``session/new`` with ``-32602`` for
-        an unsupported transport rather than skipping that one server, so a single
-        bad entry costs the whole session.
+        The mirror drops any entry whose transport the adapter did not advertise.
+        codex-acp answers ``session/new`` with ``-32602`` for an unsupported
+        transport rather than skipping that one server, so a single bad entry costs
+        the whole session. That is also why the cache for THIS backend is warmed
+        after ``initialize`` rather than on the spawn path: the advertised set does
+        not exist until the handshake has answered.
+
+        In-memory only, like claude's, so the shared call site gains no scheduling
+        or failure point (harness-parity H13).
         """
-        return []
+        return self._session_mcp_servers()
 
     def _claude_local_settings_path(self) -> Path:
         return self._work_dir / ".claude" / "settings.local.json"
@@ -4864,7 +4877,23 @@ class AcpClient:
         logger.info("ACP initialized (protocol=%s)", init_resp.get("protocolVersion"))
 
         # Check if kiro-cli supports session/load
-        self._can_load_session = init_resp.get("agentCapabilities", {}).get("loadSession", False)
+        agent_caps = init_resp.get("agentCapabilities", {}) or {}
+        self._can_load_session = agent_caps.get("loadSession", False)
+        raw_mcp_caps = agent_caps.get("mcpCapabilities")
+        self._mcp_capabilities = raw_mcp_caps if isinstance(raw_mcp_caps, dict) else {}
+
+        # Codex resolves its session MCP array HERE rather than on the spawn path,
+        # which is the one place it differs from claude and the reason is the line
+        # above: the mirror drops an entry whose transport this adapter did not
+        # advertise, and the advertised set does not exist until initialize has
+        # answered. Warming earlier would evaluate that filter against an empty
+        # capability set and silently drop every http/sse server.
+        #
+        # Off the loop, and on the codex branch only, so the shared session/new call
+        # site stays a synchronous in-memory read and the kiro construction path
+        # gains no awaited step (harness-parity H13).
+        if self._is_codex:
+            self._session_mcp_cache = await asyncio.to_thread(self._resolve_session_mcp_servers)
         self._agent_version = agent_version_from_init(init_resp)
 
         # 2. Try session/load if we have a resume ID and kiro-cli supports it
