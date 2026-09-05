@@ -719,8 +719,13 @@ class AgentConfig:
         default="",
         metadata=_meta(
             "ACP Backend",
-            "Which ACP agent to drive: '' = kiro-cli (default), 'kas' = kiro-agent. "
-            "KAS runs chat but has no native subagent progress reporting yet.",
+            "Which ACP agent to drive: '' = kiro-cli (default), 'kas' = kiro-agent, "
+            "'claude' = Claude Code, 'codex' = Codex, plus whatever an edition "
+            "registers. Each has its own sign-in, which Kiro Crew does not perform; "
+            "a switch takes effect on new sessions only. KAS runs chat but has no "
+            "native subagent progress reporting yet, and a codex session carries no "
+            "Kiro Crew MCP tools because nothing projects the agent spec onto it "
+            "yet.",
             # Deliberately NO ``enum``. A literal here was frozen at import and fed
             # two import-time structures (``JSON_SCHEMA`` and ``SCHEMA_REGISTRY``),
             # both strictly earlier than an edition registering a backend at boot.
