@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Bot, Boxes, Sparkles, Terminal } from 'lucide-react'
+import { Bot, Boxes, CircleDot, Sparkles, Terminal } from 'lucide-react'
 
 import { api } from '../../api/client'
 import type { AcpBackendProbe } from '../../api/client'
@@ -380,17 +380,22 @@ export function AgentBackendTab() {
    *
    * Deliberately NOT the list of agents the panel renders — see `candidates`. An id
    * absent here still gets a row; `nameOf` falls back to the server's `policy_id`.
+   * Every agent the core ships selectable earns a real entry: these are product
+   * names, identical in all locales, so the catalog entry costs no translation and
+   * a shipped agent should never render under a lowercase wire name.
    */
   const NAME: Record<string, string> = {
     [KIRO]: i18nT('pages.developer.agentBackendTab.kiro_cli'),
     [CLAUDE]: i18nT('pages.developer.agentBackendTab.claude_code'),
     [KAS]: i18nT('pages.developer.agentBackendTab.kas_kiro_agent'),
+    [CODEX]: i18nT('pages.developer.agentBackendTab.codex'),
   }
 
   const ICON: Record<string, React.ReactNode> = {
     [KIRO]: <Terminal size={14} />,
     [CLAUDE]: <Sparkles size={14} />,
     [KAS]: <Bot size={14} />,
+    [CODEX]: <CircleDot size={14} />,
   }
 
   /**

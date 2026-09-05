@@ -103,9 +103,9 @@ describe('AgentBackendTab', () => {
       backends: [probeRow(''), probeRow('claude'), probeRow('kas'), probeRow('codex')],
     })
     wrap()
-    await waitFor(() => expect(button('codex')).toBeEnabled())
+    await waitFor(() => expect(button('Codex')).toBeEnabled())
 
-    const labels = ['Kiro CLI', 'KAS (kiro-agent)', 'Claude Code', 'codex']
+    const labels = ['Kiro CLI', 'KAS (kiro-agent)', 'Claude Code', 'Codex']
     const rendered = screen
       .getAllByRole('button')
       .map(b => b.textContent?.trim())
@@ -253,10 +253,10 @@ describe('AgentBackendTab', () => {
       backends: [probeRow(''), probeRow('claude'), probeRow('kas'), probeRow('codex')],
     })
     wrap()
-    await waitFor(() => expect(button('codex')).toBeEnabled())
+    await waitFor(() => expect(button('Codex')).toBeEnabled())
 
     // Reachable, not merely rendered: the click has to write the id the wire accepts.
-    fireEvent.click(button('codex'))
+    fireEvent.click(button('Codex'))
     await waitFor(() => expect(patchConfigMock).toHaveBeenCalledWith('agent.acp_backend', 'codex'))
   })
 
@@ -563,6 +563,20 @@ describe('AgentBackendTab', () => {
     expect(screen.queryByText(/normally asks before it acts/)).not.toBeInTheDocument()
   })
 
+  it('gives Codex a real label rather than its lowercase wire name', async () => {
+    // `nameOf` falls back to the server's policy_id for an agent this frontend does
+    // not know, which keeps a plugin-registered one legible. An agent the core ships
+    // SELECTABLE is not that case: it earns a catalog entry, and these labels are
+    // product names that are identical in every locale, so the entry costs no
+    // translation. Rendering a shipped agent as 'codex' next to 'Claude Code' reads
+    // as an unfinished integration.
+    schemaMock.mockReturnValue(schemaWith(['', 'codex']))
+    acpBackendsMock.mockResolvedValue({ backends: [probeRow(''), probeRow('codex')] })
+    wrap()
+    await waitFor(() => expect(button('Codex')).toBeEnabled())
+    expect(screen.queryByRole('button', { name: 'codex' })).not.toBeInTheDocument()
+  })
+
   it('tells a Codex operator that being installed is not being signed in', async () => {
     // The gap the install line cannot cover. codex-acp ships its own Codex binary, so
     // `installed` answers the whole binary question -- and a session with no credential
@@ -574,7 +588,7 @@ describe('AgentBackendTab', () => {
       backends: [probeRow(''), probeRow('claude'), probeRow('kas'), probeRow('codex')],
     })
     wrap()
-    await waitFor(() => expect(button('codex')).toBeEnabled())
+    await waitFor(() => expect(button('Codex')).toBeEnabled())
     expect(screen.getByText(/Codex signs in on its own/)).toBeInTheDocument()
     expect(screen.getByText(/~\/\.codex\/config\.toml/)).toBeInTheDocument()
   })
@@ -587,7 +601,7 @@ describe('AgentBackendTab', () => {
     schemaMock.mockReturnValue(schemaWith(['', 'codex']))
     acpBackendsMock.mockResolvedValue({ backends: [probeRow(''), probeRow('codex')] })
     wrap()
-    await waitFor(() => expect(button('codex')).toBeEnabled())
+    await waitFor(() => expect(button('Codex')).toBeEnabled())
     expect(screen.getByText(/Neither is checked here/)).toBeInTheDocument()
   })
 
