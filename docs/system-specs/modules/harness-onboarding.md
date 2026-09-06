@@ -230,7 +230,7 @@ The Codex onboarding is a clean instance of stopping at Stage 7:
 | 3 spawn path | Done — adapter, npm package, dep marker, env override, project-local resolution. |
 | 4 handshake | Done — `PROTOCOL_VERSION_CODEX`, its own literal at the same number as Claude's. |
 | 5 install probe | Done — `_probe_codex` names `codex-acp` and the command that installs it. One component, not two: the adapter ships its own Codex binary. Credentials are deliberately NOT probed: a `missing` verdict disables the switch, and the checkable paths are not the only ones that authenticate a Codex, so the two-branch remedy (its own sign-in, or a `model_provider` in `~/.codex/config.toml`) is stated in the panel as a standing caveat instead. |
-| 6 selectability | Selectable. `NOT_SHIPPED_SELECTABLE` is empty again, which is the healthy state. |
+| 6 selectability | Selectable. `NOT_SHIPPED_SELECTABLE` is empty again, the healthy state. |
 | routing | Done — `SESSION_CONFIG`, verified and applied as `mode=read-only` after session/new and before the first prompt, refusing otherwise. |
 | residual | ACP v1 cannot require a prompt for a passive READ, so the sensitive-path block does not see this harness's reads. Mitigated at the OS boundary instead: its child cannot read the credential homes the standard tier leaves open. |
 | 7 live spill | Not reached. |
@@ -239,3 +239,24 @@ The lesson worth carrying: a dormant seam should be dormant for exactly one
 reason, that reason belongs where the narrowing check reads it, and closing it
 is then a single stage rather than a re-litigation. That is the shape to aim
 for — not "complete or nothing", but "incomplete at a named stage".
+
+## Worked example: the Copilot seam (selectable preview)
+
+GitHub Copilot CLI reaches Stage 6 selectable, with one honest caveat carried in
+its routing rather than a blocked spawn path:
+
+| Stage | State |
+|---|---|
+| 1 vocabulary | Done — `ACP_BACKEND_COPILOT`, in `ACP_BACKENDS_KNOWN`, `PROVIDER_LABEL_COPILOT`, policy id mapped, login command mapped. |
+| 2 capability sets | Decided for all: OUT of every set. Copilot is a per-session native process (not `ACP_BACKENDS_ACP_RUNTIME`/`SESSION_SHARING`), reads no Crew agent file, authenticates through GitHub (not the kiro store), and its model/effort/slash channels are unverified — so it inherits nothing. |
+| 3 spawn path | Done — but UNLIKE Codex, no adapter: Copilot speaks ACP natively (`copilot --acp`), so `_resolve_copilot_bin` resolves ONE native binary like kiro-cli. Its `_apply_startup_model` stays on Copilot's own default (its `/model` list is not Crew's namespace). |
+| 4 handshake | Done — `PROTOCOL_VERSION_COPILOT` (numeric 1), its own literal per H10. |
+| 5 install probe | Done — `_probe_copilot` names the `copilot` component and `npm i -g @github/copilot`. One component, native binary. |
+| 6 selectability | Selectable (preview). In `BASELINE_SELECTABLE_BACKENDS`; `NOT_SHIPPED_SELECTABLE` is empty. |
+| routing | `UNVERIFIED`, and NOT in `ENFORCED_ROUTINGS`, so a session is not refused. Copilot asks per-tool by default over ACP, so its calls reach Crew's gate via `session/request_permission` — the same posture as Claude's `SEEDED_SETTINGS`. Verifying a stronger, read-back mechanism is the remaining work. |
+| session MCP | Deferred — Copilot reads no agent file, so a session gets only pooled broker stubs today; a full session-MCP projection (join `ACP_BACKENDS_SESSION_MCP_ARRAY` + a `CodexMirror`-shaped mirror) is the next step. Recorded in `providers/mirrors/registry.py`'s `NO_MIRROR`. |
+| 7 live spill | Minimal — the first-run and 503 gates already read `ACP_BACKENDS_KIRO_IDENTITY_STORE` positively, so selecting Copilot bypasses the kiro-cli onboarding with no edit. |
+
+The remaining hardening for Copilot is a single, well-named step: verify the
+permission mechanism against a logged-in `copilot --acp`, set its `Routing` to
+the proven mechanism, and add its session-MCP mirror.

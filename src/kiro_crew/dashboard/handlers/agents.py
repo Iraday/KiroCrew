@@ -12,6 +12,8 @@ import os
 import re
 import stat
 import subprocess
+import tempfile
+import time
 import uuid
 from pathlib import Path
 from typing import Any
@@ -2013,8 +2015,113 @@ def _wrap_list_models_argv(argv: list[str]) -> tuple[list[str], str | None]:
     return wrap_argv(argv, mode=configured_sandbox_mode(), is_kiro_cli=True)
 
 
+# ── Session-advertised model lists (non-kiro backends) ──
+# Backends in ``ACP_BACKENDS_SESSION_MODEL_LIST`` (e.g. Copilot) advertise their
+# models on the ACP session itself, not via ``kiro-cli --list-models``. The picker
+# reads them from a live session, falling back to a short-lived probe cached
+# briefly so it is populated even before the first chat.
+_SESSION_MODEL_CACHE: dict[str, tuple[float, list[dict[str, str]]]] = {}
+_SESSION_MODEL_CACHE_TTL = 60.0
+
+
+def _format_session_models(raw: object) -> list[dict[str, str]]:
+    """Map an ACP ``available_models()`` list to the picker's ``{model_name, description}``."""
+    out: list[dict[str, str]] = []
+    if not isinstance(raw, list):
+        return out
+    for m in raw:
+        if not isinstance(m, dict):
+            continue
+        wire = m.get("modelId") or m.get("model_id") or m.get("model_name") or ""
+        if not isinstance(wire, str) or not wire:
+            continue
+        label = m.get("name") or m.get("description") or wire
+        out.append({"model_name": wire, "description": str(label)})
+    return out
+
+
+def _live_session_models(request: web.Request, backend: str) -> list[dict[str, str]] | None:
+    """Models from a live provider already running *backend*, or ``None``."""
+    try:
+        state: DashboardState = request.app["state"]
+        providers = list(state.sessions.active_providers())
+    except (KeyError, TypeError, AttributeError):
+        return None
+    for provider in providers:
+        client = getattr(provider, "_client", None)
+        if getattr(client, "backend", None) != backend:
+            continue
+        try:
+            formatted = _format_session_models(provider.available_models())
+        except Exception:
+            continue
+        if formatted:
+            return formatted
+    return None
+
+
+async def _probe_session_models(backend: str) -> list[dict[str, str]]:
+    """Fetch *backend*'s advertised models via a short-lived ACP session, cached.
+
+    A ``session/new`` consumes no prompt quota, so the probe is free; it is cached
+    for ``_SESSION_MODEL_CACHE_TTL`` because the picker polls every few seconds.
+    """
+    now = time.monotonic()
+    cached = _SESSION_MODEL_CACHE.get(backend)
+    if cached is not None and now - cached[0] < _SESSION_MODEL_CACHE_TTL:
+        return cached[1]
+    from kiro_crew.acp.client import AcpClient
+
+    client = AcpClient(
+        work_dir=tempfile.mkdtemp(prefix="kirocrew-models-"),
+        model="auto",
+        acp_backend=backend,
+        agent="kirocrew",
+    )
+    models: list[dict[str, str]] = []
+    try:
+        await asyncio.wait_for(client.ensure_ready(), timeout=45)
+        models = _format_session_models(client.available_models())
+    except Exception:
+        logger.debug("session model probe failed for backend %r", backend, exc_info=True)
+    finally:
+        try:
+            await client.shutdown()
+        except Exception:
+            pass
+    if models:
+        _SESSION_MODEL_CACHE[backend] = (now, models)
+        return models
+    if cached is not None:
+        return cached[1]
+    return [{"model_name": "auto", "description": "Let the backend choose the best model"}]
+
+
+async def _session_backend_model_list(request: web.Request) -> list[dict[str, str]] | None:
+    """The model list for a session-advertised backend, or ``None`` for the kiro path."""
+    from kiro_crew.acp_backends import ACP_BACKENDS_SESSION_MODEL_LIST
+
+    try:
+        backend = await asyncio.to_thread(lambda: KiroCrewConfig.load().agent.acp_backend)
+    except Exception:
+        return None
+    if backend not in ACP_BACKENDS_SESSION_MODEL_LIST:
+        return None
+    live = _live_session_models(request, backend)
+    if live:
+        return live
+    return await _probe_session_models(backend)
+
+
 async def api_models(request: web.Request) -> web.Response:
     """GET /api/models — list available models from the live kiro-cli ACP session."""
+    # Backends that advertise their model list on the ACP session itself (e.g.
+    # Copilot) source it from a live/probe session rather than the
+    # `kiro-cli --list-models` one-shot below, which an install driving such a
+    # backend may not have. Returns None for the kiro-family path.
+    session_models = await _session_backend_model_list(request)
+    if session_models is not None:
+        return web.json_response(session_models)
     # Signed-out gateways must never reach the spawn below. kiro-cli auto-opens
     # an interactive browser login for ANY subcommand run unauthenticated
     # (--no-interactive does not suppress it, and there is no opt-out env var),

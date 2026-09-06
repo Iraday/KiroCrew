@@ -20,6 +20,7 @@ from kiro_crew import acp_backends
 from kiro_crew.acp_backends import (
     ACP_BACKEND_CLAUDE,
     ACP_BACKEND_CODEX,
+    ACP_BACKEND_COPILOT,
     ACP_BACKEND_KAS,
     ACP_BACKEND_KIRO,
 )
@@ -147,13 +148,18 @@ def test_baseline_ships_every_known_backend():
 
     ``NOT_SHIPPED_SELECTABLE`` is where that reason goes. It is an explicit list
     rather than a relaxed assertion so a plain ``baseline != known`` still fails:
-    an id may sit outside the baseline only by being named there. Codex is the
-    only member — its spawn path is complete, but ``backend_install.py`` has no
-    probe for the adapter, so the switch would render with nothing to say about a
-    session that failed to start.
+    an id may sit outside the baseline only by being named there. It is empty
+    again, the healthy state: Copilot speaks ACP natively and is now selectable
+    (preview), so every known id is offered.
     """
     baseline: List[str] = sorted(acp_backends.BASELINE_SELECTABLE_BACKENDS)
     assert baseline == sorted(
-        [ACP_BACKEND_KIRO, ACP_BACKEND_CLAUDE, ACP_BACKEND_KAS, ACP_BACKEND_CODEX]
+        [
+            ACP_BACKEND_KIRO,
+            ACP_BACKEND_CLAUDE,
+            ACP_BACKEND_KAS,
+            ACP_BACKEND_CODEX,
+            ACP_BACKEND_COPILOT,
+        ]
     )
     assert baseline == sorted(acp_backends.ACP_BACKENDS_KNOWN - NOT_SHIPPED_SELECTABLE)

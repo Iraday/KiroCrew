@@ -64,6 +64,12 @@ takes an API key on stdin via `codex login --with-api-key`. If your credentials
 come from somewhere else entirely, name a `model_provider` in
 `~/.codex/config.toml` instead.
 
+GitHub Copilot CLI (`copilot`) speaks ACP natively and is a recognized backend,
+but it is in preview and not yet selectable in this build (its permission
+routing is unverified). When it is offered, sign in by launching `copilot` and
+running the `/login` slash command, or set a `GH_TOKEN` / `GITHUB_TOKEN` in the
+environment.
+
 Installed is not signed in. `kirocrew doctor` reports the adapter binaries and
 prints the sign-in check for the backends that have one; it deliberately does not
 run those checks for you, because a wrong negative would disable a control for

@@ -563,6 +563,14 @@ class TestEndpointPayloadShape:
         from kiro_crew.dashboard.handlers import acp_backend_status as handler
 
         _stub_resolvers(monkeypatch, adapter=(None, "/usr/bin"), claude_cli=None)
+        # Pin codex and copilot resolution too, so each row's verdict is the
+        # payload's contract and not the host's: both binaries can be reachable
+        # on a dev box (e.g. leaked onto PATH), which would otherwise flip their
+        # installed state and make this shape assertion environment-dependent.
+        from kiro_crew.acp import client as _client
+
+        monkeypatch.setattr(_client, "_resolve_codex_acp_bin", lambda: (None, "/usr/bin"))
+        monkeypatch.setattr(_client, "_resolve_copilot_bin", lambda: (None, "/usr/bin"))
         # ``selectable`` is pinned rather than read live: this assertion is about
         # the payload carrying the governance answer, not about what this
         # deployment's policy happens to permit today.
@@ -574,7 +582,7 @@ class TestEndpointPayloadShape:
         assert response.status == 200
 
         rows = json.loads(response.text or "{}")["backends"]
-        assert [r["policy_id"] for r in rows] == ["claude", "codex", "kas", "kiro"]
+        assert [r["policy_id"] for r in rows] == ["claude", "codex", "copilot", "kas", "kiro"]
         for row in rows:
             assert set(row) == {
                 "id",
@@ -584,6 +592,8 @@ class TestEndpointPayloadShape:
                 "missing_components",
                 "install_command",
                 "restart_required",
+                "login_command",
+                "auth_status_command",
             }
 
         by_policy = {r["policy_id"]: r for r in rows}
@@ -595,6 +605,8 @@ class TestEndpointPayloadShape:
             "missing_components": [],
             "install_command": "",
             "restart_required": False,
+            "login_command": "kiro-cli login",
+            "auth_status_command": "kiro-cli whoami",
         }
         # Not selectable in this build AND not installed here -- both facts on
         # one row, which is the whole reason the endpoint exists.

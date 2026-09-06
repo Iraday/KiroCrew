@@ -80,10 +80,13 @@ backend it started on.
 | `kas` | kiro-agent (KAS) | `kiro-cli login` | runs chat; some surfaces still missing |
 | `claude` | Claude Code | `claude auth login` | chat, streaming, tools, model and effort selection |
 | `codex` | Codex | `codex login` | chat, streaming, Kiro Crew MCP tools, model and effort selection |
+| `copilot` | GitHub Copilot | `copilot` then `/login` | preview: chat and streaming; stays on Copilot's own model; no Kiro Crew MCP tools yet |
 
 `claude` needs two binaries (`npm i -g @agentclientprotocol/claude-agent-acp` and
 the `claude` CLI); `codex` needs one (`npm i -g @agentclientprotocol/codex-acp`,
-which ships its own Codex). `kirocrew doctor` names whichever is absent, and
+which ships its own Codex); `copilot` needs the native Copilot CLI (`npm i -g
+@github/copilot`, or `curl -fsSL https://gh.io/copilot-install | bash`). `kirocrew
+doctor` names whichever is absent, and
 **Developer → Agent Backend** reports the same verdict.
 
 **Two limits to know before choosing a non-default backend.**
@@ -97,6 +100,11 @@ Crew's sensitive-path block cannot observe reads the harness performs. Configure
 credential directories are hidden from its child process at the OS boundary,
 which contains the exposure but is not the same as governing those reads. Neither
 limit applies to `kiro-cli` or `kas`.
+
+On `copilot` (preview), Kiro Crew does not yet hard-gate the session: its routing
+is unverified, so Crew relies on Copilot's own per-tool approval prompts (its
+default behaviour) reaching Kiro Crew's gate. A `copilot` session also carries no
+Kiro Crew MCP tools yet and stays on Copilot's own selected model.
 
 **What works on `kas`:** normal chat — your configured agent, its prompt, its tool
 allowlist, and session resume. The context-usage percentage meter, compaction

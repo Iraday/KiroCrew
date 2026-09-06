@@ -40,6 +40,9 @@ __all__ = [
     "claude_adapter_cached_negative",
     "claude_adapter_install_command",
     "claude_components_resolve",
+    "copilot_cli_resolves",
+    "copilot_cli_cached_negative",
+    "copilot_cli_install_command",
     "derived_agent_permissions",
     "kiro_cli_resolves",
     "resolve_pin_spelling",
@@ -212,6 +215,52 @@ def claude_adapter_install_command() -> str:
     from kiro_crew.acp.client import CLAUDE_ACP_NPM_PKG
 
     return f"npm i -g {CLAUDE_ACP_NPM_PKG}"
+
+
+def copilot_cli_resolves() -> bool:
+    """Whether the native GitHub Copilot CLI resolves to a runnable argv.
+
+    ONE native binary, like kiro-cli and unlike the two Node adapters: Copilot CLI
+    serves ACP itself (``copilot --acp``), so there is no adapter entry script and
+    no second executable to distinguish.
+    """
+    from kiro_crew.acp.client import _resolve_copilot_bin
+
+    argv, _searched_path = _resolve_copilot_bin()
+    return bool(argv)
+
+
+def copilot_cli_cached_negative() -> bool:
+    """Has the RUNNING gateway already resolved the Copilot CLI as absent?
+
+    Same hazard and resolution as :func:`codex_adapter_cached_negative`: the argv
+    is resolved once per process behind an ``_UNRESOLVED`` sentinel and never
+    invalidated, so a fresh probe reporting "installed" after an install would
+    disagree with every spawn until a restart. Consulted, never invalidated -- a
+    dashboard GET must not mutate a global on the spawn path.
+    """
+    from kiro_crew.acp import client as _client
+
+    cached = getattr(_client, "_copilot_acp_argv_cache", None)
+    if cached is None or cached is getattr(_client, "_UNRESOLVED", object()):
+        return False
+    try:
+        argv, _searched = cached  # type: ignore[misc]
+    except Exception:
+        return False
+    return not argv
+
+
+def copilot_cli_install_command() -> str:
+    """``npm i -g <package>`` -- the Copilot CLI remedy, from the repo constant.
+
+    Copilot CLI also ships a native install script, but the npm form is the one
+    that matches the resolver's PATH search on every platform and is spelled from
+    the same constant, so the advice cannot drift from what satisfies it.
+    """
+    from kiro_crew.acp.client import COPILOT_NPM_PKG
+
+    return f"npm i -g {COPILOT_NPM_PKG}"
 
 
 def _native_command_client_factory():

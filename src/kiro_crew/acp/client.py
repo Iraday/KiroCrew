@@ -74,6 +74,7 @@ from kiro_crew.acp.session_mcp import session_mcp_deny_rules
 from kiro_crew.acp.types import (
     ACP_BACKEND_CLAUDE,
     ACP_BACKEND_CODEX,
+    ACP_BACKEND_COPILOT,
     ACP_BACKEND_KAS,
     ACP_BACKEND_KIRO,
     ACP_BACKENDS_ADVERTISED_MODEL_SELECTION,
@@ -197,6 +198,9 @@ PROTOCOL_VERSION_CLAUDE = 1
 # H10 wants the handshake stated per harness, so a divergence is a one-line edit
 # here instead of a silent downgrade of whichever harness moved first.
 PROTOCOL_VERSION_CODEX = 1
+# Copilot CLI implements the stable ACP protocol (numeric integer 1). Its own
+# literal per harness-parity H10, even though the number matches the adapters'.
+PROTOCOL_VERSION_COPILOT = 1
 DEFAULT_MODEL = "auto"
 
 KIRO_CLI_BIN = "kiro-cli"
@@ -260,6 +264,19 @@ _ENV_CODEX_ACP_BIN = "CODEX_ACP_BIN"
 # who sets it reaches the child through the ambient environment copy, so naming it
 # here would imply a wiring that does not exist (its claude counterpart,
 # CLAUDE_CODE_EXECUTABLE, IS explicitly forwarded — the asymmetry is deliberate).
+
+# ── GitHub Copilot CLI (ACP_BACKEND_COPILOT) ──
+# Copilot CLI implements ACP NATIVELY (`copilot --acp`), so it is resolved and
+# spawned as a single native binary like kiro-cli -- there is no Node adapter and
+# no entry script to locate. Dormant seam: it is not selectable and its routing is
+# UNVERIFIED, so this path is exercised only by a test or a force-registering
+# edition until the permission mechanism is verified against the licensed binary.
+COPILOT_BIN = "copilot"
+COPILOT_ACP_ARG = "--acp"
+COPILOT_NPM_PKG = "@github/copilot"
+# Explicit override for the resolved binary, spelled to match the adapter-style
+# env convention (CODEX_ACP_BIN / CLAUDE_AGENT_ACP_BIN).
+_ENV_COPILOT_BIN = "COPILOT_ACP_BIN"
 
 # High-frequency, content-free adapter stderr diagnostics that _drain_stderr()
 # drops instead of forwarding as per-line WARNINGs.  The driving case is the
@@ -693,10 +710,29 @@ def _resolve_codex_acp_bin() -> tuple[list[str] | None, str]:
             return [node, resolved], search_path
         if platform_compat.is_executable_file(script):
             return [_normalize_exe_casing(script) or script], search_path
-        node_on_path = shutil.which("node", path=search_path)
-        if node_on_path:
-            return [node_on_path, resolved], search_path
+    return None, search_path
 
+
+_copilot_acp_argv_cache: tuple[list[str] | None, str] | object = _UNRESOLVED
+
+
+def _resolve_copilot_bin() -> tuple[list[str] | None, str]:
+    """Find the native GitHub Copilot CLI and the PATH searched for it.
+
+    Copilot CLI speaks ACP natively (``copilot --acp``), so unlike
+    :func:`_resolve_codex_acp_bin` there is no Node entry script to locate: this
+    resolves ONE executable the way kiro-cli is resolved -- an explicit override
+    first, then the augmented PATH (mise/nvm/fnm/volta shims, npm global bin, the
+    standard user tool dirs). Returns the argv (the binary plus ``--acp``) and the
+    searched PATH, so a "not found" message can name exactly where it looked.
+    """
+    search_path = augmented_path(os.environ.get("PATH", ""))
+    override = os.environ.get(_ENV_COPILOT_BIN)
+    if override and Path(override).is_file():
+        return [str(Path(override).resolve()), COPILOT_ACP_ARG], search_path
+    on_path = shutil.which(COPILOT_BIN, path=search_path)
+    if on_path:
+        return [_normalize_exe_casing(on_path) or on_path, COPILOT_ACP_ARG], search_path
     return None, search_path
 
 
@@ -1493,6 +1529,7 @@ _BACKEND_DISPLAY_NAME: dict = {
     ACP_BACKEND_KAS: "kiro-cli",
     ACP_BACKEND_CLAUDE: "Claude Code",
     ACP_BACKEND_CODEX: "Codex",
+    ACP_BACKEND_COPILOT: "GitHub Copilot",
 }
 
 
@@ -3032,6 +3069,10 @@ class AcpClient:
         return self.backend == ACP_BACKEND_CODEX
 
     @property
+    def _is_copilot(self) -> bool:
+        return self.backend == ACP_BACKEND_COPILOT
+
+    @property
     def _model_registry_namespace(self) -> str:
         """The model_registry namespace key for this backend (``claude_code`` /
         ``acp``). A registry index selector, NOT a provider-identity check — see
@@ -4140,6 +4181,32 @@ class AcpClient:
             adapter_hidden_dirs = await asyncio.to_thread(
                 _sandbox_preflight, self.backend, self._sandbox_mode
             )
+        elif self._is_copilot:
+            # Native ACP binary (`copilot --acp`), so this resolves ONE executable
+            # like the kiro branch rather than a Node adapter entry script. Dormant
+            # seam: the backend is not selectable, so this path is reached only by a
+            # test or a force-registering edition. No agent file and no session MCP
+            # array are projected onto it yet (see acp_backends: Copilot is in no
+            # capability set pending live verification), so it carries only the
+            # pooled broker stubs at session/new.
+            global _copilot_acp_argv_cache  # noqa: PLW0603
+            if _copilot_acp_argv_cache is _UNRESOLVED:
+                _copilot_acp_argv_cache = await asyncio.to_thread(_resolve_copilot_bin)
+            cached_copilot_resolution = _copilot_acp_argv_cache
+            copilot_argv, copilot_search_path = (
+                cached_copilot_resolution
+                if isinstance(cached_copilot_resolution, tuple)
+                else (None, "")
+            )
+            if not isinstance(copilot_argv, list) or not copilot_argv:
+                raise AcpError(
+                    f"{COPILOT_BIN} not found "
+                    f"({describe_search_path(copilot_search_path)}). Install it with "
+                    f"'npm i -g {COPILOT_NPM_PKG}' or 'curl -fsSL "
+                    f"https://gh.io/copilot-install | bash', then run '{COPILOT_BIN}' "
+                    f"and sign in with /login."
+                )
+            argv = copilot_argv
         else:
             # Pin ONE reading of the environment for both the search and the
             # message that reports it. The previous code resolved against the live
@@ -4346,7 +4413,11 @@ class AcpClient:
         _spawn_label = (
             CLAUDE_ACP_BIN
             if self._is_claude
-            else CODEX_ACP_BIN if self._is_codex else f"{KIRO_CLI_BIN} {KIRO_CLI_SUBCMD}"
+            else (
+                CODEX_ACP_BIN
+                if self._is_codex
+                else COPILOT_BIN if self._is_copilot else f"{KIRO_CLI_BIN} {KIRO_CLI_SUBCMD}"
+            )
         )
         # Everything from here to the end of _spawn runs with a LIVE subprocess
         # that nothing has recorded yet, so every step must be guarded. Without
@@ -4478,7 +4549,11 @@ class AcpClient:
             _bin_label = (
                 "claude-acp"
                 if self._is_claude
-                else CODEX_ACP_BIN if self._is_codex else KIRO_CLI_BIN
+                else (
+                    CODEX_ACP_BIN
+                    if self._is_codex
+                    else COPILOT_BIN if self._is_copilot else KIRO_CLI_BIN
+                )
             )
             logger.warning("%s stderr: %s", _bin_label, redacted)
         if suppressed:
@@ -4863,7 +4938,11 @@ class AcpClient:
         protocol_version: int | str = (
             PROTOCOL_VERSION_CLAUDE
             if self._is_claude
-            else PROTOCOL_VERSION_CODEX if self._is_codex else PROTOCOL_VERSION
+            else (
+                PROTOCOL_VERSION_CODEX
+                if self._is_codex
+                else PROTOCOL_VERSION_COPILOT if self._is_copilot else PROTOCOL_VERSION
+            )
         )
         init_id = await self._send_request(
             METHOD_INITIALIZE,

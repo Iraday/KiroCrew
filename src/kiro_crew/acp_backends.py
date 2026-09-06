@@ -45,6 +45,18 @@ ACP_BACKEND_KAS = "kas"
 # operator holding the adapter can select it; that constant carries what had to be
 # true first.
 ACP_BACKEND_CODEX = "codex"
+# GitHub Copilot CLI, which speaks ACP NATIVELY (`copilot --acp`, public preview
+# Jan 2026) rather than through a Node adapter -- so it is spawned like kiro-cli
+# (a native binary), not like the claude/codex adapters. Selectable (preview): it
+# is in BASELINE_SELECTABLE_BACKENDS so an operator can choose it, and its spawn,
+# handshake and install probe are complete. Its routing is Routing.UNVERIFIED and
+# therefore NOT enforced by acp_tool_gate, so Crew does not hard-gate the session:
+# it relies on Copilot's native per-tool asking (its default mode requests approval
+# for every file/exec tool) reaching Crew's PreToolUse gate over
+# session/request_permission -- the same posture as Claude's SEEDED_SETTINGS. It
+# joins no other capability set (all fail-safe exclusions) pending live verification
+# of a stronger, read-back permission mechanism.
+ACP_BACKEND_COPILOT = "copilot"
 # The kiro-cli backend is spelled as the empty string throughout, so name it
 # rather than leaving every call site to infer it from "not claude".
 ACP_BACKEND_KIRO = ""
@@ -58,6 +70,7 @@ ACP_BACKENDS_KNOWN: FrozenSet[str] = frozenset(
         ACP_BACKEND_CLAUDE,
         ACP_BACKEND_KAS,
         ACP_BACKEND_CODEX,
+        ACP_BACKEND_COPILOT,
     }
 )
 
@@ -114,7 +127,13 @@ ACP_BACKENDS_SESSION_MCP_ARRAY: FrozenSet[str] = frozenset({ACP_BACKEND_CLAUDE, 
 #: the read-gate floor itself, so the compensating control covers exactly what the
 #: control it compensates for covers, minus the harness's own token store.
 BASELINE_SELECTABLE_BACKENDS: FrozenSet[str] = frozenset(
-    {ACP_BACKEND_KIRO, ACP_BACKEND_CLAUDE, ACP_BACKEND_KAS, ACP_BACKEND_CODEX}
+    {
+        ACP_BACKEND_KIRO,
+        ACP_BACKEND_CLAUDE,
+        ACP_BACKEND_KAS,
+        ACP_BACKEND_CODEX,
+        ACP_BACKEND_COPILOT,
+    }
 )
 
 # ── Policy-facing spelling ──
@@ -136,6 +155,7 @@ POLICY_ID_BY_BACKEND: dict = {
     ACP_BACKEND_KAS: ACP_BACKEND_KAS,
     ACP_BACKEND_CLAUDE: ACP_BACKEND_CLAUDE,
     ACP_BACKEND_CODEX: ACP_BACKEND_CODEX,
+    ACP_BACKEND_COPILOT: ACP_BACKEND_COPILOT,
 }
 
 #: The backend a deployment policy may never deny.
@@ -179,6 +199,14 @@ BACKEND_LOGIN_COMMAND: dict = {
     # harness that still reports a stale session on the next turn.
     ACP_BACKEND_CLAUDE: "claude auth login",
     ACP_BACKEND_CODEX: "codex login",
+    # Copilot CLI has no non-interactive login subcommand: sign-in is the `/login`
+    # slash command inside an interactive session (or a GH_TOKEN/GITHUB_TOKEN PAT
+    # in the environment). The slash form is a TUI command, not a shell one -- as
+    # with claude's `/login` note, printing it would name something that signs
+    # nothing in from a shell -- so the runnable instruction is to launch the CLI
+    # and follow its prompt. No BACKEND_AUTH_STATUS_COMMAND entry: there is no
+    # documented read-only, non-interactive status subcommand to claim.
+    ACP_BACKEND_COPILOT: "copilot",
 }
 
 #: A READ-ONLY command that reports whether a harness is signed in, for a user
@@ -531,6 +559,7 @@ _MODEL_REGISTRY_NAMESPACE_BY_BACKEND: dict = {
     ACP_BACKEND_KIRO: "acp",
     ACP_BACKEND_KAS: "acp",
     ACP_BACKEND_CODEX: "acp",
+    ACP_BACKEND_COPILOT: "acp",
 }
 
 
@@ -566,6 +595,16 @@ ACP_BACKENDS_KIRO_SLASH_COMMANDS = frozenset({ACP_BACKEND_KIRO, ACP_BACKEND_KAS}
 # reads no agent file at all (``ACP_BACKENDS_SESSION_MCP_ARRAY``), and codex-acp
 # has not demonstrated the capability — neither inherits it.
 ACP_BACKENDS_MCP_CONFIG_HOT_RELOAD = frozenset({ACP_BACKEND_KIRO})
+
+# Backends whose available model list is advertised by the ACP session itself
+# (the ``models`` field on ``session/new``), so ``GET /api/models`` reads it from
+# a live session (or a short-lived probe) rather than a ``kiro-cli --list-models``
+# one-shot. An install driving such a backend may not have kiro-cli at all, so the
+# kiro shell-out would 503 and leave the picker empty. Copilot advertises its full
+# list (auto, the gpt-5.x family, the claude-* family, gemini, ...) and accepts
+# those exact ids via ``session/set_model``, and every one passes ``to_acp_id``
+# unchanged, so no id translation is needed.
+ACP_BACKENDS_SESSION_MODEL_LIST = frozenset({ACP_BACKEND_COPILOT})
 
 
 # ── How a harness is made to ask ──
@@ -622,6 +661,12 @@ ACP_BACKEND_ROUTING: dict = {
     ACP_BACKEND_KAS: Routing.AGENT_SPEC,
     ACP_BACKEND_CLAUDE: Routing.SEEDED_SETTINGS,
     ACP_BACKEND_CODEX: Routing.SESSION_CONFIG,
+    # Copilot asks per-tool by default over ACP, but Crew has not yet verified an
+    # enforceable, read-back mechanism against the licensed binary -- so it is
+    # UNVERIFIED. That is NOT in ENFORCED_ROUTINGS, so the session is not refused;
+    # Crew relies on Copilot's native asking reaching the gate, the same posture as
+    # Claude's SEEDED_SETTINGS. Tighten to a proven mechanism once verified.
+    ACP_BACKEND_COPILOT: Routing.UNVERIFIED,
 }
 
 

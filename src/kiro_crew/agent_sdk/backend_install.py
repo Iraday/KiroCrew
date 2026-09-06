@@ -34,6 +34,7 @@ from typing import Callable, Dict, List, Tuple
 from kiro_crew.acp_backends import (
     ACP_BACKEND_CLAUDE,
     ACP_BACKEND_CODEX,
+    ACP_BACKEND_COPILOT,
     ACP_BACKEND_KAS,
     ACP_BACKEND_KIRO,
     ACP_BACKENDS_KNOWN,
@@ -67,6 +68,10 @@ COMPONENT_CLAUDE_CODE_CLI = "claude"
 #: The codex-acp adapter. ONE component, not two: the adapter ships its own
 #: compatible Codex binary, so there is no second executable Crew resolves.
 COMPONENT_CODEX_ACP_ADAPTER = "codex-acp"
+
+#: The native GitHub Copilot CLI. ONE component: Copilot speaks ACP itself, so
+#: there is no adapter and no second executable Crew hands it.
+COMPONENT_COPILOT_CLI = "copilot"
 
 #: How long a verdict is reused. The Claude driver shells out to mise and globs
 #: the filesystem, and the dashboard polls this endpoint, so an uncached probe
@@ -228,11 +233,37 @@ def _probe_codex() -> BackendInstallState:
     )
 
 
+def _probe_copilot() -> BackendInstallState:
+    """The Copilot backend needs one native component, and names it when absent.
+
+    Copilot CLI serves ACP itself, so -- like kiro-cli and unlike the two Node
+    adapters -- there is ONE binary and no half-install. ``restart_required``
+    mirrors the codex probe: when the CLI resolves now but the running gateway
+    cached a negative, the honest answer is "installed, restart to use it".
+    """
+    policy_id = _policy_id(ACP_BACKEND_COPILOT)
+    if acp_driver.copilot_cli_resolves():
+        return BackendInstallState(
+            ACP_BACKEND_COPILOT,
+            policy_id,
+            INSTALLED,
+            restart_required=acp_driver.copilot_cli_cached_negative(),
+        )
+    return BackendInstallState(
+        ACP_BACKEND_COPILOT,
+        policy_id,
+        MISSING,
+        (COMPONENT_COPILOT_CLI,),
+        acp_driver.copilot_cli_install_command(),
+    )
+
+
 _PROBES: Dict[str, Callable[[], BackendInstallState]] = {
     ACP_BACKEND_KIRO: _probe_kiro,
     ACP_BACKEND_KAS: _probe_kas,
     ACP_BACKEND_CLAUDE: _probe_claude,
     ACP_BACKEND_CODEX: _probe_codex,
+    ACP_BACKEND_COPILOT: _probe_copilot,
 }
 
 

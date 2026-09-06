@@ -13,6 +13,7 @@ from __future__ import annotations
 from kiro_crew.acp_backends import (
     ACP_BACKEND_CLAUDE,
     ACP_BACKEND_CODEX,
+    ACP_BACKEND_COPILOT,
     ACP_BACKEND_KAS,
     ACP_BACKEND_KIRO,
 )
@@ -44,6 +45,14 @@ NO_MIRROR: dict[str, str] = {
         "KAS's own capability vocabulary) — it simply has not moved into this folder "
         "yet. Tracked as the next PR in the mirror stack; NOT a claim that it needs "
         "no mirror"
+    ),
+    ACP_BACKEND_COPILOT: (
+        "Copilot lands DORMANT: it is not selectable and its routing is UNVERIFIED, so "
+        "no session runs on it yet. It reads no Crew agent file, so when it is flipped "
+        "selectable it WILL need a session-MCP projection (join ACP_BACKENDS_SESSION_"
+        "MCP_ARRAY and add a mirror here, shaped like CodexMirror). That projection is "
+        "deferred until the spawn/handshake and permission mechanism are verified "
+        "against the licensed binary; NOT a claim that it needs no mirror"
     ),
 }
 
